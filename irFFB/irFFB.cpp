@@ -56,30 +56,30 @@ enum ffbType {
 wchar_t *ffbTypeString(int type) {
 
     switch (type) {
-        case FFBTYPE_60HZ:			return L"60 Hz";
-        case FFBTYPE_120HZ:			return L"120 Hz";
-        case FFBTYPE_360HZ:			return L"360 Hz";
-        case FFBTYPE_60HZ_INTERP:	return L"60 Hz interpolated";
-        case FFBTYPE_360HZ_INTERP:	return L"360 Hz interpolated";
-        case FFBTYPE_DIRECT:		return L"60 Hz direct";
+        case FFBTYPE_60HZ:          return L"60 Hz";
+        case FFBTYPE_120HZ:         return L"120 Hz";
+        case FFBTYPE_360HZ:         return L"360 Hz";
+        case FFBTYPE_60HZ_INTERP:   return L"60 Hz interpolated";
+        case FFBTYPE_360HZ_INTERP:  return L"360 Hz interpolated";
+        case FFBTYPE_DIRECT:        return L"60 Hz direct";
         case FFBTYPE_DIRECT_INTERP: return L"60 Hz direct interpolated";
-        case FFBTYPE_360HZ_PREDICT:	return L"360 Hz predicted";
-        default:					return L"Unknown FFB type";
+        case FFBTYPE_360HZ_PREDICT: return L"360 Hz predicted";
+        default:                    return L"Unknown FFB type";
     }
 }
 
 wchar_t *ffbTypeShortString(int type) {
 
     switch (type) {
-        case FFBTYPE_60HZ:			return L"60 Hz";
-        case FFBTYPE_120HZ:			return L"120 Hz";
-        case FFBTYPE_360HZ:			return L"360 Hz";
+        case FFBTYPE_60HZ:          return L"60 Hz";
+        case FFBTYPE_120HZ:         return L"120 Hz";
+        case FFBTYPE_360HZ:         return L"360 Hz";
         case FFBTYPE_60HZ_INTERP:   return L"60 Hz I";
         case FFBTYPE_360HZ_INTERP:  return L"360 Hz I";
-        case FFBTYPE_DIRECT:		return L"60 Hz D";
+        case FFBTYPE_DIRECT:        return L"60 Hz D";
         case FFBTYPE_DIRECT_INTERP: return L"60 Hz DI";
-        case FFBTYPE_360HZ_PREDICT:	return L"360 Hz P";
-        default:					return L"Unknown";
+        case FFBTYPE_360HZ_PREDICT: return L"360 Hz P";
+        default:                    return L"Unknown";
     }
 }
 

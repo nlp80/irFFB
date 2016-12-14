@@ -155,7 +155,7 @@ DWORD WINAPI readWheelThread(LPVOID lParam) {
 
     while (true) {
 
-        res = WaitForSingleObject(wheelEvent, 1000);
+        res = WaitForSingleObject(wheelEvent, INFINITE);
         
         if (!ffdevice)
             continue; 
@@ -244,7 +244,7 @@ int APIENTRY wWinMain(
     _In_opt_ HINSTANCE hPrevInstance,
     _In_ LPWSTR    lpCmdLine,
     _In_ int       nCmdShow
-    ) {
+) {
 
     UNREFERENCED_PARAMETER(hPrevInstance);
     UNREFERENCED_PARAMETER(lpCmdLine);
@@ -316,7 +316,7 @@ int APIENTRY wWinMain(
 
         if (
             irsdk_startup() && (hdr = irsdk_getHeader()) &&
-            (hdr->status & irsdk_stConnected) && hdr->bufLen != dataLen && hdr->bufLen != 0
+            hdr->status & irsdk_stConnected && hdr->bufLen != dataLen && hdr->bufLen != 0
         ) {
 
             handles[0] = hDataValidEvent;
@@ -355,7 +355,8 @@ int APIENTRY wWinMain(
             if (wasOnTrack && !*isOnTrack) {
                 wasOnTrack = false;
                 text(L"Has left track");
-                setFFB(0);
+                force = 0;
+                setFFB(force);
             }
 
             else if (!wasOnTrack && *isOnTrack) {
@@ -1098,9 +1099,9 @@ inline int scaleTorque(float t) {
 
     if (minForce) {
         if (t > 0 && t < minForce)
-            t = (float)minForce;
+            return minForce;
         else if (t < 0 && t > -minForce)
-            t = (float)-minForce;
+            return -minForce;
     }
 
     return f2i(t);

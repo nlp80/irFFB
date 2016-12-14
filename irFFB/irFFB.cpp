@@ -174,7 +174,6 @@ DWORD WINAPI readWheelThread(LPVOID lParam) {
                 vjData.lButtons |= 1 << i;
             else
                 vjData.lButtons &= ~(1 << i);
-
         }
         // This could be wrong, untested..
         for (int i = 0; i < numPov; i++) {

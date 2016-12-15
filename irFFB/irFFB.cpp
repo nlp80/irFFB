@@ -355,6 +355,7 @@ int APIENTRY wWinMain(
             if (wasOnTrack && !*isOnTrack) {
                 wasOnTrack = false;
                 text(L"Has left track");
+                lastTorque = 0;
                 force = 0;
                 setFFB(force);
             }
@@ -453,7 +454,7 @@ int APIENTRY wWinMain(
                     invFactor = 1 - factor;
                 }
 
-                setFFB(int(factor * DI_MAX + scaleTorque(*swTorque) * invFactor));
+                setFFB(f2i(factor * DI_MAX + scaleTorque(*swTorque) * invFactor));
                 continue;
 
             }

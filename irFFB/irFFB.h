@@ -40,6 +40,8 @@ inline int f2i(float);
 inline void sleepSpinUntil(PLARGE_INTEGER, UINT, UINT);
 inline int scaleTorque(float);
 inline void setFFB(int);
+void readSettings();
+void writeSettings();
 void initAll();
 void releaseAll();
 

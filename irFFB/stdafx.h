@@ -16,7 +16,6 @@
 #include <malloc.h>
 #include <memory.h>
 #include <tchar.h>
-#include <cmath>
 
 #include <Strsafe.h>
 #include <Shlobj.h>
@@ -24,6 +23,8 @@
 #define DIRECTINPUT_VERSION 0x0800 
 #include <dinput.h>
 
+#define _USE_MATH_DEFINES
+#include <cmath>
 #include <chrono>
 #include <thread>
 

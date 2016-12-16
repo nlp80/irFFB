@@ -40,6 +40,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #define DI_MAX 10000
 #define MINFORCE_MULTIPLIER 20
 #define STOPS_MAXFORCE_RAD 0.175f // 10 deg
+#define KEY_PATH L"Software\\irFFB\\Settings"
 
 enum ffbType {
     FFBTYPE_60HZ,
@@ -93,7 +94,7 @@ WCHAR szWindowClass[MAX_LOADSTRING];
 LPDIRECTINPUT8 pDI = nullptr;
 GUID ffdevices[MAX_FFB_DEVICES];
 int  ffdeviceIdx = 0;
-GUID *devGuid = nullptr;
+GUID devGuid = GUID_NULL;
 LPDIRECTINPUTDEVICE8 ffdevice = nullptr;
 LPDIRECTINPUTEFFECT effect = nullptr;
 
@@ -102,6 +103,8 @@ DWORD axes[1] = { DIJOFS_X };
 LONG  dir[1]  = { 0 };
 DIPERIODIC pforce;
 DIEFFECT   dieff;
+
+float cosInterp[6];
 
 int ffb, origFFB, testFFB;
 int force = 0, minForce = 0, maxForce = 0, delayTicks = 0;
@@ -221,11 +224,9 @@ DWORD WINAPI directFFBThread(LPVOID lParam) {
 
         QueryPerformanceCounter(&start);
 
-        int diffPerSample = (force - lastSample) / DIRECT_INTERP_SAMPLES;
-
         for (int i = 1; i < DIRECT_INTERP_SAMPLES; i++) {
 
-            setFFB(lastSample + diffPerSample * i);
+            setFFB(f2i((float)lastSample * (1 - cosInterp[i]) + (float)force * cosInterp[i]));
             sleepSpinUntil(&start, 2000, 2760 * i);
 
         }
@@ -274,8 +275,12 @@ int APIENTRY wWinMain(
     LoadStringW(hInstance, IDC_IRFFB, szWindowClass, MAX_LOADSTRING);
     MyRegisterClass(hInstance);
 
-    if (!InitInstance(hInstance, nCmdShow))
-        return FALSE;
+    cosInterp[0] = 0;
+    for (int i = 1; i < 6; i++) {
+        cosInterp[i] = (1.0f - cosf((float)M_PI * (float)i / 6)) / 2;
+    }
+
+    readSettings();
     
     // Setup DI FFB effect
     pforce.dwMagnitude = 0;
@@ -298,6 +303,9 @@ int APIENTRY wWinMain(
     dieff.cbTypeSpecificParams = sizeof(DIPERIODIC);
     dieff.lpvTypeSpecificParams = &pforce;
     dieff.dwStartDelay = 0;
+
+    if (!InitInstance(hInstance, nCmdShow))
+        return FALSE;
 
     LARGE_INTEGER start;
     QueryPerformanceFrequency(&freq);
@@ -509,11 +517,9 @@ int APIENTRY wWinMain(
 
                     QueryPerformanceCounter(&start);
 
-                    float diffPerSample = (*swTorque - lastTorque) / swTSTnumSamples;
-
                     for (int i = 1; i < swTSTnumSamples; i++) {
 
-                        setFFB(scaleTorque(lastTorque + diffPerSample * i));
+                        setFFB(scaleTorque(lastTorque * (1 - cosInterp[i]) + *swTorque * cosInterp[i]));
                         sleepSpinUntil(&start, 2000, 2760 * i);
 
                     }
@@ -739,21 +745,20 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow) {
         SendMessage(cmpWnd, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(ffbTypeString(i)));
     }
 
-    SendMessage(ffbWnd, CB_SETCURSEL, FFBTYPE_60HZ, 0);
-    ffb = origFFB = FFBTYPE_60HZ;
+    SendMessage(ffbWnd, CB_SETCURSEL, ffb, 0);
+    origFFB  = ffb;
 
-    SendMessage(cmpWnd, CB_SETCURSEL, FFBTYPE_360HZ, 0);
-    testFFB = FFBTYPE_360HZ;
+    SendMessage(cmpWnd, CB_SETCURSEL, testFFB, 0);
 
     slider(&minWnd, L"Min force:", 216, L"0", L"20");
     SendMessage(minWnd, TBM_SETRANGE, TRUE, MAKELPARAM(0, 20));
-    minForce = 0;
+    SendMessage(minWnd, TBM_SETPOS, TRUE, minForce);
+    SendMessage(minWnd, TBM_SETPOSNOTIFY, 0, minForce);
     
     slider(&maxWnd, L"Max force:", 288, L"5 Nm", L"65 Nm");
     SendMessage(maxWnd, TBM_SETRANGE, TRUE, MAKELPARAM(5, 65));
-    SendMessage(maxWnd, TBM_SETPOS, TRUE, 45);
-    SendMessage(maxWnd, TBM_SETPOSNOTIFY, 0, 45);
-    maxForce = 45;
+    SendMessage(maxWnd, TBM_SETPOS, TRUE, maxForce);
+    SendMessage(maxWnd, TBM_SETPOSNOTIFY, 0, maxForce);
 
     slider(&delayWnd, L"Extra latency:", 360, L"0 ticks", L"20 ticks");
     SendMessage(delayWnd, TBM_SETRANGE, TRUE, MAKELPARAM(0, 20));
@@ -805,7 +810,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 
                             int idx = (int)SendMessage(devWnd, CB_GETCURSEL, 0, 0);
                             if (idx < ffdeviceIdx) {
-                                devGuid = &ffdevices[idx];
+                                devGuid = ffdevices[idx];
                                 initDirectInput();
                             }
 
@@ -884,6 +889,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 
         case WM_DESTROY: {
             releaseAll();
+            writeSettings();
             exit(0);
         }
         break;
@@ -938,8 +944,15 @@ BOOL CALLBACK EnumFFDevicesCallback(LPCDIDEVICEINSTANCE diDevInst, VOID *wnd) {
     if (ffdeviceIdx == MAX_FFB_DEVICES)
         return false;
 
-    ffdevices[ffdeviceIdx++] = diDevInst->guidInstance;
+    ffdevices[ffdeviceIdx] = diDevInst->guidInstance;
     SendMessage((HWND)wnd, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(diDevInst->tszProductName));
+
+    if (devGuid == diDevInst->guidInstance) {
+        SendMessage((HWND)wnd, CB_SETCURSEL, ffdeviceIdx, 0);
+        initDirectInput();
+    }
+
+    ffdeviceIdx++;
 
     return true;
 
@@ -1007,7 +1020,7 @@ void initDirectInput() {
         return;
     }
 
-    if (FAILED(pDI->CreateDevice(*devGuid, &ffdevice, nullptr))) {
+    if (FAILED(pDI->CreateDevice(devGuid, &ffdevice, nullptr))) {
         text(L"Failed to create DI device");
         return;
     }
@@ -1049,7 +1062,7 @@ void initDirectInput() {
     }
 
     if (FAILED(ffdevice->CreateEffect(GUID_Sine, &dieff, &effect, nullptr))) {
-        text(L"Failed to create Sine periodic effect");
+        text(L"Failed to create sine periodic effect");
         return;
     }
 
@@ -1197,6 +1210,63 @@ bool initVJD() {
     ResetVJD(VJOY_DEVICEID);
 
     return true;
+
+}
+
+void readSettings() {
+
+    wchar_t dguid[GUIDSTRING_MAX];
+    HKEY regKey;
+    DWORD sz = sizeof(int);
+    DWORD dgsz = sizeof(dguid);
+
+    if (!RegOpenKeyEx(HKEY_CURRENT_USER, KEY_PATH, 0, KEY_ALL_ACCESS, &regKey)) {
+
+        if (!RegGetValue(regKey, nullptr, L"device", RRF_RT_REG_SZ, nullptr, dguid, &dgsz))
+            if (FAILED(IIDFromString(dguid, &devGuid)))
+                devGuid = GUID_NULL;
+        if (RegGetValue(regKey, nullptr, L"ffb", RRF_RT_REG_DWORD, nullptr, &ffb, &sz))
+            ffb = FFBTYPE_60HZ;
+        if (RegGetValue(regKey, nullptr, L"testFFB", RRF_RT_REG_DWORD, nullptr, &testFFB, &sz))
+            testFFB = FFBTYPE_360HZ;
+        if (RegGetValue(regKey, nullptr, L"maxForce", RRF_RT_REG_DWORD, nullptr, &maxForce, &sz))
+            maxForce = 45;
+        if (RegGetValue(regKey, nullptr, L"minForce", RRF_RT_REG_DWORD, nullptr, &minForce, &sz))
+            minForce = 0;
+
+    }
+    else {
+        ffb = FFBTYPE_60HZ;
+        testFFB = FFBTYPE_360HZ;
+        minForce = 0;
+        maxForce = 45;
+    }
+
+}
+
+void writeSettings() {
+
+    wchar_t *guid;
+    HKEY regKey;
+    DWORD sz = sizeof(int);
+
+    RegCreateKeyEx(
+        HKEY_CURRENT_USER, KEY_PATH, 0, nullptr, 
+        REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, nullptr, &regKey, nullptr
+    );
+
+    if (!RegOpenKeyEx(HKEY_CURRENT_USER, KEY_PATH, 0, KEY_ALL_ACCESS, &regKey)) {
+
+        if (SUCCEEDED(StringFromCLSID(devGuid, (LPOLESTR *)&guid))) {
+            int len = (lstrlenW(guid) + 1) * sizeof(wchar_t);
+            RegSetValueEx(regKey, L"device", 0, REG_SZ, (BYTE *)guid, len);
+        }
+        RegSetValueEx(regKey, L"ffb",      0, REG_DWORD, (BYTE *)&ffb,      sz);
+        RegSetValueEx(regKey, L"testFFB",  0, REG_DWORD, (BYTE *)&testFFB,  sz);
+        RegSetValueEx(regKey, L"maxForce", 0, REG_DWORD, (BYTE *)&maxForce, sz);
+        RegSetValueEx(regKey, L"minForce", 0, REG_DWORD, (BYTE *)&minForce, sz);
+
+    }
 
 }
 

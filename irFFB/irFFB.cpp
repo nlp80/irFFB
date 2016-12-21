@@ -1,22 +1,18 @@
 /*
 Copyright (c) 2016 NLP
 
-Permission is hereby granted, free of charge, to any person obtaining a copy of
-this software and associated documentation files (the "Software"), to deal in
-the Software without restriction, including without limitation the rights to 
-use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies 
-of the Software, and to permit persons to whom the Software is furnished to do 
-so, subject to the following conditions:
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
 
-The above copyright notice and this permission notice shall be included in all 
-copies or substantial portions of the Software.
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR 
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, 
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE 
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, 
-WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN 
-CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include "stdafx.h"
@@ -49,7 +45,7 @@ enum ffbType {
     FFBTYPE_60HZ_INTERP,
     FFBTYPE_360HZ_INTERP,
     FFBTYPE_DIRECT,
-    FFBTYPE_DIRECT_INTERP,
+    FFBTYPE_DIRECT_FILTER,
     FFBTYPE_360HZ_PREDICT,
     FFBTYPE_UNKNOWN
 };
@@ -63,7 +59,7 @@ wchar_t *ffbTypeString(int type) {
         case FFBTYPE_60HZ_INTERP:   return L"60 Hz interpolated";
         case FFBTYPE_360HZ_INTERP:  return L"360 Hz interpolated";
         case FFBTYPE_DIRECT:        return L"60 Hz direct";
-        case FFBTYPE_DIRECT_INTERP: return L"60 Hz direct interpolated";
+        case FFBTYPE_DIRECT_FILTER: return L"60 Hz direct filtered";
         case FFBTYPE_360HZ_PREDICT: return L"360 Hz predicted";
         default:                    return L"Unknown FFB type";
     }
@@ -78,7 +74,7 @@ wchar_t *ffbTypeShortString(int type) {
         case FFBTYPE_60HZ_INTERP:   return L"60 Hz I";
         case FFBTYPE_360HZ_INTERP:  return L"360 Hz I";
         case FFBTYPE_DIRECT:        return L"60 Hz D";
-        case FFBTYPE_DIRECT_INTERP: return L"60 Hz DI";
+        case FFBTYPE_DIRECT_FILTER: return L"60 Hz DF";
         case FFBTYPE_360HZ_PREDICT: return L"360 Hz P";
         default:                    return L"Unknown";
     }
@@ -105,6 +101,9 @@ DIPERIODIC pforce;
 DIEFFECT   dieff;
 
 float cosInterp[6];
+
+// float firc[] = { 0.0227531f, 0.11104f, 0.2843528f, 0.3356835f, 0.1998188f, 0.0463566f };
+float firc[] = { -0.0072657f, 0.0838032f, 0.2410764f, 0.3194108f, 0.2757275f, 0.0871442f  };
 
 int ffb, origFFB, testFFB;
 int force = 0, minForce = 0, maxForce = 0, delayTicks = 0;
@@ -207,7 +206,9 @@ DWORD WINAPI readWheelThread(LPVOID lParam) {
 // Write FFB samples for the direct modes
 DWORD WINAPI directFFBThread(LPVOID lParam) {
 
-    int lastSample = 0;
+    float s;
+    float prod[] = { 0, 0, 0, 0, 0, 0 };
+    float output[6];
     LARGE_INTEGER start;
 
     while (true) {
@@ -224,15 +225,27 @@ DWORD WINAPI directFFBThread(LPVOID lParam) {
 
         QueryPerformanceCounter(&start);
 
-        for (int i = 1; i < DIRECT_INTERP_SAMPLES; i++) {
+        s = (float)force;
 
-            setFFB(f2i((float)lastSample * (1 - cosInterp[i]) + (float)force * cosInterp[i]));
+        prod[0] = s * firc[0];
+        output[0] = prod[0] + prod[1] + prod[2] + prod[3] + prod[4] + prod[5];
+        prod[1] = s * firc[1];
+        output[1] = prod[0] + prod[1] + prod[2] + prod[3] + prod[4] + prod[5];
+        prod[2] = s * firc[2];
+        output[2] = prod[0] + prod[1] + prod[2] + prod[3] + prod[4] + prod[5];
+        prod[3] = s * firc[3];
+        output[3] = prod[0] + prod[1] + prod[2] + prod[3] + prod[4] + prod[5];
+        prod[4] = s * firc[4];
+        output[4] = prod[0] + prod[1] + prod[2] + prod[3] + prod[4] + prod[5];
+        prod[5] = s * firc[5];
+        output[5] = prod[0] + prod[1] + prod[2] + prod[3] + prod[4] + prod[5];
+
+        for (int i = 0; i < DIRECT_INTERP_SAMPLES; i++) {
+
+            setFFB((int)output[i]);
             sleepSpinUntil(&start, 2000, 2760 * i);
 
         }
-
-        setFFB(force);
-        lastSample = force;
 
     }
 
@@ -439,7 +452,7 @@ int APIENTRY wWinMain(
 
             lastSpeed = *speed;
 
-            if (!*isOnTrack || ffb == FFBTYPE_DIRECT || ffb == FFBTYPE_DIRECT_INTERP)
+            if (!*isOnTrack || ffb == FFBTYPE_DIRECT || ffb == FFBTYPE_DIRECT_FILTER)
                 continue;
 
             halfSteerMax = *steerMax / 2;
@@ -462,7 +475,7 @@ int APIENTRY wWinMain(
                     invFactor = 1 - factor;
                 }
 
-                setFFB(f2i(factor * DI_MAX + scaleTorque(*swTorque) * invFactor));
+                setFFB((int)(factor * DI_MAX + scaleTorque(*swTorque) * invFactor));
                 continue;
 
             }
@@ -752,8 +765,8 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow) {
 
     slider(&minWnd, L"Min force:", 216, L"0", L"20");
     SendMessage(minWnd, TBM_SETRANGE, TRUE, MAKELPARAM(0, 20));
-    SendMessage(minWnd, TBM_SETPOS, TRUE, minForce);
-    SendMessage(minWnd, TBM_SETPOSNOTIFY, 0, minForce);
+    SendMessage(minWnd, TBM_SETPOS, TRUE, minForce / 20);
+    SendMessage(minWnd, TBM_SETPOSNOTIFY, 0, minForce / 20);
     
     slider(&maxWnd, L"Max force:", 288, L"5 Nm", L"65 Nm");
     SendMessage(maxWnd, TBM_SETRANGE, TRUE, MAKELPARAM(5, 65));
@@ -820,7 +833,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                             ffb = origFFB = (int)SendMessage(ffbWnd, CB_GETCURSEL, 0, 0);
                             EnableWindow(delayWnd, ffb == FFBTYPE_60HZ ? true : false);
 
-                            if (ffb == FFBTYPE_DIRECT || ffb == FFBTYPE_DIRECT_INTERP)
+                            if (ffb == FFBTYPE_DIRECT || ffb == FFBTYPE_DIRECT_FILTER)
                                 FfbStart(VJOY_DEVICEID);
                             else
                                 FfbStop(VJOY_DEVICEID);
@@ -1086,10 +1099,6 @@ void reacquireDIDevice() {
 
 }
 
-inline int f2i(float f) {
-    return _mm_cvt_ss2si(_mm_load_ss(&f));
-}
-
 inline void sleepSpinUntil(PLARGE_INTEGER base, UINT sleep, UINT offset) {
 
     LARGE_INTEGER time;
@@ -1118,7 +1127,7 @@ inline int scaleTorque(float t) {
             return -minForce;
     }
 
-    return f2i(t);
+    return (int)t;
 
 }
 
@@ -1142,7 +1151,7 @@ void CALLBACK vjFFBCallback(PVOID ffbPacket, PVOID data) {
     FFB_EFF_CONSTANT constEffect;
     int16_t mag;
 
-    if (ffb != FFBTYPE_DIRECT && ffb != FFBTYPE_DIRECT_INTERP)
+    if (ffb != FFBTYPE_DIRECT && ffb != FFBTYPE_DIRECT_FILTER)
         return;
 
     // Only interested in constant force reports

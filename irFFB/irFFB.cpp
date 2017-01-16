@@ -29,7 +29,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #define MAX_LOADSTRING 100
 
-#define VJOY_DEVICEID 1
 #define MAX_FFB_DEVICES 16
 #define MAX_TESTS 20
 #define MAX_SAMPLES 24
@@ -123,6 +122,8 @@ int testNum = MAX_TESTS + 1;
 int testFFBTypes[MAX_TESTS];
 bool guesses[MAX_TESTS];
 
+int vjDev = 1;
+
 float *floatvarptr(const char *data, const char *name) {
     int idx = irsdk_varNameToIndex(name);
     if (idx >= 0) 
@@ -153,7 +154,7 @@ DWORD WINAPI readWheelThread(LPVOID lParam) {
     HRESULT res;
     JOYSTICK_POSITION vjData;
 
-    ResetVJD(VJOY_DEVICEID);
+    ResetVJD(vjDev);
 
     while (true) {
 
@@ -197,7 +198,7 @@ DWORD WINAPI readWheelThread(LPVOID lParam) {
 
         }
 
-        UpdateVJD(VJOY_DEVICEID, (PVOID)&vjData);
+        UpdateVJD(vjDev, (PVOID)&vjData);
 
     }
 
@@ -834,9 +835,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                             EnableWindow(delayWnd, ffb == FFBTYPE_60HZ ? true : false);
 
                             if (ffb == FFBTYPE_DIRECT || ffb == FFBTYPE_DIRECT_FILTER)
-                                FfbStart(VJOY_DEVICEID);
+                                FfbStart(vjDev);
                             else
-                                FfbStop(VJOY_DEVICEID);
+                                FfbStop(vjDev);
 
                         }
                         else if ((HWND)lParam == cmpWnd)
@@ -1173,9 +1174,11 @@ void CALLBACK vjFFBCallback(PVOID ffbPacket, PVOID data) {
 bool initVJD() {
 
     WORD verDll, verDrv;
+    int maxVjDev;
+    VjdStat vjdStatus;
 
     if (!vJoyEnabled()) {
-        text(L"VJoy Not Enabled!");
+        text(L"vJoy Not Enabled!");
         return false;
     }
     else if (!DriverMatch(&verDll, &verDrv)) {
@@ -1185,38 +1188,54 @@ bool initVJD() {
     else
         text(L"vJoy driver version %04x init OK", verDrv);
 
-    VjdStat vjdStatus = GetVJDStatus(VJOY_DEVICEID);
-    if (vjdStatus == VJD_STAT_BUSY)
-        text(L"VJ device %d is busy!", VJOY_DEVICEID);
-    else if (vjdStatus == VJD_STAT_MISS)
-        text(L"VJ device %d is disabled!", VJOY_DEVICEID);
+    vjDev = 1;
+
+    if (!GetvJoyMaxDevices(&maxVjDev)) {
+        text(L"Failed to determine max number of vJoy devices");
+        return false;
+    }
+
+    while (vjDev <= maxVjDev) {
+
+        vjdStatus = GetVJDStatus(vjDev);
+
+        if (vjdStatus == VJD_STAT_BUSY || vjdStatus == VJD_STAT_MISS)
+            goto NEXT;
+        if (!GetVJDAxisExist(vjDev, HID_USAGE_X))
+            goto NEXT;
+        if (!IsDeviceFfb(vjDev) || !IsDeviceFfbEffect(vjDev, HID_USAGE_CONST))
+            goto NEXT;
+
+        break;
+
+NEXT:
+        vjDev++;
+
+    }
+
+    if (vjDev > maxVjDev) {
+        text(L"Failed to find suitable vJoy device!");
+        return false;
+    }
+
     if (vjdStatus == VJD_STAT_OWN) {
-        RelinquishVJD(VJOY_DEVICEID);
-        vjdStatus = GetVJDStatus(VJOY_DEVICEID);
+        RelinquishVJD(vjDev);
+        vjdStatus = GetVJDStatus(vjDev);
     }
     if (vjdStatus == VJD_STAT_FREE) {
-        if (!AcquireVJD(VJOY_DEVICEID)) {
-            text(L"Failed to acquire VJ device %d!", VJOY_DEVICEID);
+        if (!AcquireVJD(vjDev)) {
+            text(L"Failed to acquire vJoy device %d!", vjDev);
             return false;
         }
     }
     else {
-        text(L"ERROR: VJ device %d status is %d", VJOY_DEVICEID, vjdStatus);
+        text(L"ERROR: vJoy device %d status is %d", vjDev, vjdStatus);
         return false;
     }
 
-    if (!IsDeviceFfb(VJOY_DEVICEID)) {
-        text(L"VJ device %d doesn't support FFB", VJOY_DEVICEID);
-        return false;
-    }
-
-    if (!IsDeviceFfbEffect(VJOY_DEVICEID, HID_USAGE_CONST)) {
-        text(L"VJ device %d doesn't support constant force effect", VJOY_DEVICEID);
-        return false;
-    }
-
+    text(L"Acquired vJoy device %d", vjDev);
     FfbRegisterGenCB(vjFFBCallback, NULL);
-    ResetVJD(VJOY_DEVICEID);
+    ResetVJD(vjDev);
 
     return true;
 
@@ -1304,7 +1323,7 @@ void releaseAll() {
         pDI = nullptr;
     }
 
-    RelinquishVJD(VJOY_DEVICEID);
+    RelinquishVJD(vjDev);
 
     irsdk_shutdown();
 

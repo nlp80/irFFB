@@ -1,4 +1,4 @@
-/*
+            /*
 Copyright (c) 2016 NLP
 
 This program is free software: you can redistribute it and/or modify
@@ -39,7 +39,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define KEY_PATH L"Software\\irFFB\\Settings"
 
 enum ffbType {
-    FFBTYPE_60HZ,
     FFBTYPE_360HZ,
     FFBTYPE_360HZ_INTERP,
     FFBTYPE_DIRECT_FILTER,
@@ -205,20 +204,10 @@ DWORD WINAPI directFFBThread(LPVOID lParam) {
         if (!use360ForDirect)
             s += scaleTorque(suspForce);
 
-        prod[0] = s * firc[0];
-        output[0] = prod[0] + prod[1] + prod[2] + prod[3] + prod[4] + prod[5];
-        prod[1] = s * firc[1];
-        output[1] = prod[0] + prod[1] + prod[2] + prod[3] + prod[4] + prod[5];
-        prod[2] = s * firc[2];
-        output[2] = prod[0] + prod[1] + prod[2] + prod[3] + prod[4] + prod[5];
-        prod[3] = s * firc[3];
-        output[3] = prod[0] + prod[1] + prod[2] + prod[3] + prod[4] + prod[5];
-        prod[4] = s * firc[4];
-        output[4] = prod[0] + prod[1] + prod[2] + prod[3] + prod[4] + prod[5];
-        prod[5] = s * firc[5];
-        output[5] = prod[0] + prod[1] + prod[2] + prod[3] + prod[4] + prod[5];
-
         for (int i = 0; i < DIRECT_INTERP_SAMPLES; i++) {
+
+            prod[i] = s * firc[i];
+            output[i] = prod[0] + prod[1] + prod[2] + prod[3] + prod[4] + prod[5];
 
             if (use360ForDirect)
                 output[i] += scaleTorque(suspForceST[i]);
@@ -253,12 +242,11 @@ int APIENTRY wWinMain(
     float *speed = nullptr;
     float *LFshockDeflST = nullptr, *RFshockDeflST = nullptr;
     float LFshockDeflLast, RFshockDeflLast;
-    int *gear = nullptr;
     bool *isOnTrack = nullptr;
 
     bool wasOnTrack = false;
     int numHandles = 0, dataLen = 0;
-    int swTSTnumSamples = 0, swTSTmaxIdx = 0, swTSTusPerSample = 0;
+    int swTSTnumSamples = 0, swTSTmaxIdx = 0;
     float halfSteerMax = 0, lastTorque = 0, lastSuspForce = 0;
 
     HACCEL hAccelTable = LoadAccelerators(hInstance, MAKEINTRESOURCE(IDC_IRFFB));
@@ -327,7 +315,6 @@ int APIENTRY wWinMain(
             steer = floatvarptr(data, "SteeringWheelAngle");
             steerMax = floatvarptr(data, "SteeringWheelAngleMax");
             speed = floatvarptr(data, "Speed");
-            gear = intvarptr(data, "Gear");
             isOnTrack = boolvarptr(data, "IsOnTrack");
 
             RFshockDeflST = floatvarptr(data, "RFshockDefl_ST");
@@ -1131,7 +1118,7 @@ void readSettings() {
             if (FAILED(IIDFromString(dguid, &devGuid)))
                 devGuid = GUID_NULL;
         if (RegGetValue(regKey, nullptr, L"ffb", RRF_RT_REG_DWORD, nullptr, &ffb, &sz))
-            ffb = FFBTYPE_60HZ;
+            ffb = FFBTYPE_DIRECT_FILTER;
         if (RegGetValue(regKey, nullptr, L"maxForce", RRF_RT_REG_DWORD, nullptr, &maxForce, &sz))
             maxForce = 45;
         if (RegGetValue(regKey, nullptr, L"minForce", RRF_RT_REG_DWORD, nullptr, &minForce, &sz))

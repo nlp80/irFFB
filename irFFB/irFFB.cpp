@@ -30,36 +30,28 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MAX_LOADSTRING 100
 
 #define MAX_FFB_DEVICES 16
-#define MAX_TESTS 20
-#define MAX_SAMPLES 24
 #define DI_MAX 10000
 #define MINFORCE_MULTIPLIER 20
+#define SUSTEXFORCE_MULTIPLIER 160
+#define SUSLOADFORCE_MULTIPLIER 3
 #define STOPS_MAXFORCE_RAD 0.175f // 10 deg
+#define DIRECT_INTERP_SAMPLES 6
 #define KEY_PATH L"Software\\irFFB\\Settings"
 
 enum ffbType {
     FFBTYPE_60HZ,
-    FFBTYPE_120HZ,
     FFBTYPE_360HZ,
-    FFBTYPE_60HZ_INTERP,
     FFBTYPE_360HZ_INTERP,
-    FFBTYPE_DIRECT,
     FFBTYPE_DIRECT_FILTER,
-    FFBTYPE_360HZ_PREDICT,
     FFBTYPE_UNKNOWN
 };
 
 wchar_t *ffbTypeString(int type) {
 
     switch (type) {
-        case FFBTYPE_60HZ:          return L"60 Hz";
-        case FFBTYPE_120HZ:         return L"120 Hz";
         case FFBTYPE_360HZ:         return L"360 Hz";
-        case FFBTYPE_60HZ_INTERP:   return L"60 Hz interpolated";
         case FFBTYPE_360HZ_INTERP:  return L"360 Hz interpolated";
-        case FFBTYPE_DIRECT:        return L"60 Hz direct";
         case FFBTYPE_DIRECT_FILTER: return L"60 Hz direct filtered";
-        case FFBTYPE_360HZ_PREDICT: return L"360 Hz predicted";
         default:                    return L"Unknown FFB type";
     }
 }
@@ -67,14 +59,9 @@ wchar_t *ffbTypeString(int type) {
 wchar_t *ffbTypeShortString(int type) {
 
     switch (type) {
-        case FFBTYPE_60HZ:          return L"60 Hz";
-        case FFBTYPE_120HZ:         return L"120 Hz";
         case FFBTYPE_360HZ:         return L"360 Hz";
-        case FFBTYPE_60HZ_INTERP:   return L"60 Hz I";
         case FFBTYPE_360HZ_INTERP:  return L"360 Hz I";
-        case FFBTYPE_DIRECT:        return L"60 Hz D";
         case FFBTYPE_DIRECT_FILTER: return L"60 Hz DF";
-        case FFBTYPE_360HZ_PREDICT: return L"360 Hz P";
         default:                    return L"Unknown";
     }
 }
@@ -99,28 +86,22 @@ LONG  dir[1]  = { 0 };
 DIPERIODIC pforce;
 DIEFFECT   dieff;
 
-float cosInterp[6];
+float firc[] = { 0.0135009f, 0.0903209f, 0.2332305f, 0.3240389f, 0.2607993f, 0.0777116f };
 
-// float firc[] = { 0.0227531f, 0.11104f, 0.2843528f, 0.3356835f, 0.1998188f, 0.0463566f };
-float firc[] = { -0.0072657f, 0.0838032f, 0.2410764f, 0.3194108f, 0.2757275f, 0.0871442f  };
-
-int ffb, origFFB, testFFB;
-int force = 0, minForce = 0, maxForce = 0, delayTicks = 0;
+int ffb;
+int force = 0, minForce = 0, maxForce = 0, susTexFactor = 0, susLoadFactor = 0;
+volatile float suspForce = 0, suspForceST[DIRECT_INTERP_SAMPLES];
+bool stopped = true, use360ForDirect = true;
 
 int numButtons, numPov;
 
 HANDLE wheelEvent = CreateEvent(nullptr, false, false, L"WheelEvent");
 HANDLE ffbEvent   = CreateEvent(nullptr, false, false, L"FFBEvent");
 
-HWND mainWnd, textWnd, devWnd, ffbWnd, cmpWnd, minWnd, maxWnd, delayWnd, testWnd;
+HWND mainWnd, textWnd, devWnd, ffbWnd;
+HWND minWnd, maxWnd, susTexWnd, susLoadWnd, use360Wnd;
 
 LARGE_INTEGER freq;
-
-int read, write;
-
-int testNum = MAX_TESTS + 1;
-int testFFBTypes[MAX_TESTS];
-bool guesses[MAX_TESTS];
 
 int vjDev = 1;
 
@@ -217,16 +198,12 @@ DWORD WINAPI directFFBThread(LPVOID lParam) {
         // Signalled when force has been updated
         WaitForSingleObject(ffbEvent, INFINITE);
 
-        if (ffb == FFBTYPE_DIRECT) {
-            setFFB(force);
-            continue;
-        }
-
-#define DIRECT_INTERP_SAMPLES 6
-
         QueryPerformanceCounter(&start);
 
         s = (float)force;
+
+        if (!use360ForDirect)
+            s += scaleTorque(suspForce);
 
         prod[0] = s * firc[0];
         output[0] = prod[0] + prod[1] + prod[2] + prod[3] + prod[4] + prod[5];
@@ -242,6 +219,9 @@ DWORD WINAPI directFFBThread(LPVOID lParam) {
         output[5] = prod[0] + prod[1] + prod[2] + prod[3] + prod[4] + prod[5];
 
         for (int i = 0; i < DIRECT_INTERP_SAMPLES; i++) {
+
+            if (use360ForDirect)
+                output[i] += scaleTorque(suspForceST[i]);
 
             setFFB((int)output[i]);
             sleepSpinUntil(&start, 2000, 2760 * i);
@@ -271,28 +251,21 @@ int APIENTRY wWinMain(
 
     float *swTorque = nullptr, *swTorqueST = nullptr, *steer = nullptr, *steerMax = nullptr;
     float *speed = nullptr;
+    float *LFshockDeflST = nullptr, *RFshockDeflST = nullptr;
+    float LFshockDeflLast, RFshockDeflLast;
     int *gear = nullptr;
     bool *isOnTrack = nullptr;
 
-    bool wasOnTrack = false, hasStopped = false, readingGuess = false, inNeutral = true;
+    bool wasOnTrack = false;
     int numHandles = 0, dataLen = 0;
     int swTSTnumSamples = 0, swTSTmaxIdx = 0, swTSTusPerSample = 0;
-    float halfSteerMax = 0, lastSpeed, lastTorque;
-    int maxGear, neutralCounter;
-
-    int sampleBuffer[MAX_SAMPLES];
-    memset(sampleBuffer, 0, sizeof(int) * MAX_SAMPLES);
+    float halfSteerMax = 0, lastTorque = 0, lastSuspForce = 0;
 
     HACCEL hAccelTable = LoadAccelerators(hInstance, MAKEINTRESOURCE(IDC_IRFFB));
 
     LoadStringW(hInstance, IDS_APP_TITLE, szTitle, MAX_LOADSTRING);
     LoadStringW(hInstance, IDC_IRFFB, szWindowClass, MAX_LOADSTRING);
     MyRegisterClass(hInstance);
-
-    cosInterp[0] = 0;
-    for (int i = 1; i < 6; i++) {
-        cosInterp[i] = (1.0f - cosf((float)M_PI * (float)i / 6)) / 2;
-    }
 
     readSettings();
     
@@ -328,8 +301,6 @@ int APIENTRY wWinMain(
     SetPriorityClass(GetCurrentProcess(), ABOVE_NORMAL_PRIORITY_CLASS);
     CreateThread(NULL, 0, readWheelThread, NULL, 0, NULL);
     CreateThread(NULL, 0, directFFBThread, NULL, 0, NULL);
-
-    srand((unsigned)time(NULL));
     
     while (TRUE) {
 
@@ -358,15 +329,18 @@ int APIENTRY wWinMain(
             speed = floatvarptr(data, "Speed");
             gear = intvarptr(data, "Gear");
             isOnTrack = boolvarptr(data, "IsOnTrack");
+
+            RFshockDeflST = floatvarptr(data, "RFshockDefl_ST");
+            LFshockDeflST = floatvarptr(data, "LFshockDefl_ST");
             
+            RFshockDeflLast = LFshockDeflLast = -10000;
             int swTorqueSTidx = irsdk_varNameToIndex("SteeringWheelTorque_ST");
             swTSTnumSamples = irsdk_getVarHeaderEntry(swTorqueSTidx)->count;
             swTSTmaxIdx = swTSTnumSamples - 1;
 
-            lastSpeed = lastTorque = 0.0f;
-            neutralCounter = 0;
-            wasOnTrack = readingGuess = hasStopped = false;
-            inNeutral = irConnected = true;
+            lastTorque = 0.0f;
+            wasOnTrack = false;
+            irConnected = true;
 
         }
 
@@ -377,83 +351,71 @@ int APIENTRY wWinMain(
             if (wasOnTrack && !*isOnTrack) {
                 wasOnTrack = false;
                 text(L"Has left track");
-                lastTorque = 0;
+                lastTorque = suspForce = 0;
+                for (int i = 0; i < DIRECT_INTERP_SAMPLES; i++)
+                    suspForceST[i] = 0;
                 force = 0;
-                setFFB(force);
+                setFFB(0);
             }
 
             else if (!wasOnTrack && *isOnTrack) {
                 wasOnTrack = true;
                 text(L"Is now on track");
                 reacquireDIDevice();
-                write = 0;
-                read = -delayTicks;
-                if (testNum == 0)
-                    ffb = rand() & 1 ? testFFB : origFFB;
             }
 
-            // Blind testing
-            if (testNum < MAX_TESTS) {
+            if (*speed > 1) {
 
-                if (*speed < 0.1 && lastSpeed > 0.1) {
-                    hasStopped = true;
+                if (RFshockDeflLast != -10000) {
+
+                    if (ffb != FFBTYPE_DIRECT_FILTER || use360ForDirect) {
+
+                        float LFdelta[] = { 0, 0, 0, 0, 0, 0 };
+                        if (LFshockDeflST != nullptr) {
+                            LFdelta[0] = LFshockDeflST[0] - LFshockDeflLast;
+                            for (int i = 1; i < swTSTnumSamples; i++)
+                                LFdelta[i] = LFshockDeflST[i] - LFshockDeflST[i - 1];
+                        }
+                        float RFdelta[] = { 0, 0, 0, 0, 0, 0 };
+                        if (RFshockDeflST != nullptr) {
+                            RFdelta[0] = RFshockDeflST[0] - RFshockDeflLast;
+                            for (int i = 1; i < swTSTnumSamples; i++)
+                                RFdelta[i] = RFshockDeflST[i] - RFshockDeflST[i - 1];
+                        }
+
+                        for (int i = 0; i < swTSTnumSamples; i++) {
+                            suspForceST[i] = (LFdelta[i] - RFdelta[i]) * susTexFactor;
+                            suspForceST[i] +=
+                                (LFshockDeflST[i] - RFshockDeflST[i]) * susLoadFactor;
+                        }
+
+                    }
+                    else {
+                        float LFdelta = 0, RFdelta = 0;
+                        if (LFshockDeflST != nullptr) 
+                            LFdelta = LFshockDeflST[swTSTmaxIdx] - LFshockDeflLast;
+                        if (LFshockDeflST != nullptr)
+                            RFdelta = RFshockDeflST[swTSTmaxIdx] - RFshockDeflLast;
+                        suspForce = (LFdelta - RFdelta) * (susTexFactor >> 2);
+                        suspForce +=
+                            (LFshockDeflST[swTSTmaxIdx] - RFshockDeflST[swTSTmaxIdx]) *
+                                susLoadFactor;
+                    }
+                
                 }
-                else if (*speed > 0.1 && lastSpeed < 0.1 && hasStopped) {
 
-                    if (readingGuess)
-                        text(L"Set off without making a guess, no change");
+                if (RFshockDeflST != nullptr)
+                    RFshockDeflLast = RFshockDeflST[swTSTmaxIdx];
+                if (LFshockDeflST != nullptr)
+                    LFshockDeflLast = LFshockDeflST[swTSTmaxIdx];
 
-                    hasStopped = false;
-                    readingGuess = false;
-                    maxGear = 0;
+                stopped = false;
 
-                }
-
-                if (*gear == 0 && neutralCounter++ >= 10) {
-                    inNeutral = true;
-                }
-                else {
-                    neutralCounter = 0;
-                    inNeutral = false;
-                }
-
-                if (hasStopped && !readingGuess && inNeutral) {
-                    readingGuess = true;
-                    text(L"Waiting for guess..");
-                }
-
-                if (readingGuess && *gear > maxGear)
-                    maxGear = *gear;
-
-                if (hasStopped && readingGuess && maxGear > 0 && maxGear < 3 && inNeutral) {
-
-                    readingGuess = hasStopped = false;
-                    testFFBTypes[testNum] = ffb;
-
-                    if (ffb == testFFB && maxGear == 2)
-                        guesses[testNum] = true;
-                    else if (ffb == origFFB && maxGear == 1)
-                        guesses[testNum] = true;
-                    else
-                        guesses[testNum] = false;
-
-                    text(
-                        L"Guess %d of %s recorded, setting FFB type",
-                        testNum + 1,
-                        maxGear == 2 ? ffbTypeShortString(testFFB) : ffbTypeShortString(origFFB)
-                    );
-
-                    maxGear = 0;
-                    testNum++;
-
-                    ffb = rand() & 1 ? testFFB : origFFB;
-
-                }
             }
+            else
+                stopped = true;
 
-            lastSpeed = *speed;
-
-            if (!*isOnTrack || ffb == FFBTYPE_DIRECT || ffb == FFBTYPE_DIRECT_FILTER)
+            if (!*isOnTrack || ffb == FFBTYPE_DIRECT_FILTER)
                 continue;
 
             halfSteerMax = *steerMax / 2;
@@ -484,62 +446,17 @@ int APIENTRY wWinMain(
             // Telemetry FFB
             switch (ffb) {
 
-                case FFBTYPE_60HZ: {
-
-                    if (delayTicks > 0) {
-                        sampleBuffer[write] = scaleTorque(*swTorque);
-                        if (++write > delayTicks)
-                            write = 0;
-                        if (read >= 0)
-                            setFFB(sampleBuffer[read]);
-                        if (++read > delayTicks)
-                            read = 0;
-                    }
-                    else
-                        setFFB(scaleTorque(*swTorque));
-
-                }
-                break;
-                
-                case FFBTYPE_120HZ: {
-
-                    QueryPerformanceCounter(&start);
-                    setFFB(scaleTorque(swTorqueST[swTSTmaxIdx >> 1]));
-
-                    sleepSpinUntil(&start, 8000, 8320);
-                    setFFB(scaleTorque(swTorqueST[swTSTmaxIdx]));
-
-                }
-                break;
-
                 case FFBTYPE_360HZ: {
 
                     QueryPerformanceCounter(&start);
 
                     for (int i = 0; i < swTSTmaxIdx; i++) {
 
-                        setFFB(scaleTorque(swTorqueST[i]));
+                        setFFB(scaleTorque(swTorqueST[i] + suspForceST[i]));
                         sleepSpinUntil(&start, 2000, 2760 * (i + 1));
                         
                     }
-                    setFFB(scaleTorque(swTorqueST[swTSTmaxIdx]));
-
-                }
-                break;
-
-                case FFBTYPE_60HZ_INTERP: {
-
-                    QueryPerformanceCounter(&start);
-
-                    for (int i = 1; i < swTSTnumSamples; i++) {
-
-                        setFFB(scaleTorque(lastTorque * (1 - cosInterp[i]) + *swTorque * cosInterp[i]));
-                        sleepSpinUntil(&start, 2000, 2760 * i);
-
-                    }
-                    setFFB(scaleTorque(*swTorque));
-                    lastTorque = *swTorque;
-
+                    setFFB(scaleTorque(swTorqueST[swTSTmaxIdx] + suspForceST[swTSTmaxIdx]));
                 }
                 break;
 
@@ -548,43 +465,29 @@ int APIENTRY wWinMain(
                     QueryPerformanceCounter(&start);
 
                     float diff = swTorqueST[0] - lastTorque;
-                    setFFB(scaleTorque(lastTorque + diff / 2));
+                    float sdiff = suspForceST[0] - lastSuspForce;
+                    setFFB(scaleTorque(lastTorque + diff / 2 + lastSuspForce + sdiff / 2));
                     sleepSpinUntil(&start, 0, 1380);
                     
                     for (int i = 0; i < swTSTmaxIdx << 1; i++) {
 
+                        int idx = i >> 1;
+
                         if (i & 1) {
-                            int idx = i >> 1;
                             diff = swTorqueST[idx + 1] - swTorqueST[idx];
-                            setFFB(scaleTorque(swTorqueST[idx] + diff / 2));
+                            sdiff = suspForceST[idx + 1] - suspForceST[idx];
+                            setFFB(scaleTorque(swTorqueST[idx] + diff / 2 + suspForceST[idx] + sdiff / 2));
                         }
                         else
-                            setFFB(scaleTorque(swTorqueST[i >> 1]));
+                            setFFB(scaleTorque(swTorqueST[idx] + suspForceST[idx]));
 
                         sleepSpinUntil(&start, 0, 1380 * (i + 2));
 
                     }
 
-                    setFFB(scaleTorque(swTorqueST[swTSTmaxIdx]));
+                    setFFB(scaleTorque(swTorqueST[swTSTmaxIdx] + suspForceST[swTSTmaxIdx]));
                     lastTorque = swTorqueST[swTSTmaxIdx];
-
-                }
-                break;
-
-                case FFBTYPE_360HZ_PREDICT: {
-
-                    QueryPerformanceCounter(&start);
-
-                    float diff = swTorqueST[swTSTmaxIdx] - swTorqueST[swTSTmaxIdx - 1];
-    
-                    for (int i = 0; i < swTSTmaxIdx; i++) {
-
-                        setFFB(scaleTorque(swTorqueST[swTSTmaxIdx] + diff * i));
-                        sleepSpinUntil(&start, 2000, 2760 * (i + 1));
-
-                    }
-
-                    setFFB(scaleTorque(swTorqueST[swTSTmaxIdx] + diff * swTSTmaxIdx));
+                    lastSuspForce = suspForceST[swTSTmaxIdx];
 
                 }
                 break;
@@ -620,50 +523,6 @@ int APIENTRY wWinMain(
     }
 
     return (int)msg.wParam;
-
-}
-
-void startTest() {
-
-    text(L"Blind testing started");
-    SendMessage(testWnd, WM_SETTEXT, 0, (LPARAM)L"End Test");
-
-    testNum = 0;
-    memset(testFFBTypes, 0, sizeof(int) * MAX_TESTS);
-    memset(guesses, 0, sizeof(bool) * MAX_TESTS);
-    EnableWindow(ffbWnd, false);
-    EnableWindow(cmpWnd, false);
-        
-}
-
-void endTest() {
-
-    text(L"Blind testing stopped");
-    SendMessage(testWnd, WM_SETTEXT, 0, (LPARAM)L"Blind Test");
-
-    if (testNum) {
-
-        int correct = 0;
-
-        for (int i = 0; i < testNum; i++) {
-            text(
-                L"Test %d: FFB was %s, guess was %s",
-                i + 1,
-                ffbTypeShortString(testFFBTypes[i]),
-                guesses[i] ? L"correct" : L"incorrect"
-            );
-            if (guesses[i])
-                correct++;
-        }
-
-        text(L"Summary: %.02f%% correct", (float)correct * 100 / testNum);
-
-    }
-
-    ffb = origFFB;
-    EnableWindow(ffbWnd, true);
-    EnableWindow(cmpWnd, true);
-    testNum = MAX_TESTS + 1;
 
 }
 
@@ -742,7 +601,7 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow) {
     mainWnd = CreateWindowW(
         szWindowClass, szTitle,
         WS_OVERLAPPEDWINDOW,
-        CW_USEDEFAULT, CW_USEDEFAULT, 432, 800,
+        CW_USEDEFAULT, CW_USEDEFAULT, 432, 840,
         NULL, NULL, hInstance, NULL
     );
 
@@ -752,47 +611,52 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow) {
     combo(&devWnd, L"FFB device:", 20);
 
     combo(&ffbWnd, L"FFB type:", 80);
-    combo(&cmpWnd, L"Compare against:", 144);
 
-    for (int i = 0; i < FFBTYPE_UNKNOWN; i++) {
+    for (int i = 0; i < FFBTYPE_UNKNOWN; i++)
         SendMessage(ffbWnd, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(ffbTypeString(i)));
-        SendMessage(cmpWnd, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(ffbTypeString(i)));
-    }
 
     SendMessage(ffbWnd, CB_SETCURSEL, ffb, 0);
-    origFFB  = ffb;
 
-    SendMessage(cmpWnd, CB_SETCURSEL, testFFB, 0);
-
-    slider(&minWnd, L"Min force:", 216, L"0", L"20");
+    slider(&minWnd, L"Min force:", 144, L"0", L"20");
     SendMessage(minWnd, TBM_SETRANGE, TRUE, MAKELPARAM(0, 20));
-    SendMessage(minWnd, TBM_SETPOS, TRUE, minForce / 20);
-    SendMessage(minWnd, TBM_SETPOSNOTIFY, 0, minForce / 20);
+    SendMessage(minWnd, TBM_SETPOS, TRUE, minForce / MINFORCE_MULTIPLIER);
+    SendMessage(minWnd, TBM_SETPOSNOTIFY, 0, minForce / MINFORCE_MULTIPLIER);
     
-    slider(&maxWnd, L"Max force:", 288, L"5 Nm", L"65 Nm");
+    slider(&maxWnd, L"Max force:", 216, L"5 Nm", L"65 Nm");
     SendMessage(maxWnd, TBM_SETRANGE, TRUE, MAKELPARAM(5, 65));
     SendMessage(maxWnd, TBM_SETPOS, TRUE, maxForce);
     SendMessage(maxWnd, TBM_SETPOSNOTIFY, 0, maxForce);
 
-    slider(&delayWnd, L"Extra latency:", 360, L"0 ticks", L"20 ticks");
-    SendMessage(delayWnd, TBM_SETRANGE, TRUE, MAKELPARAM(0, 20));
-    delayTicks = 0;
+    slider(&susTexWnd, L"Suspension bumps:", 288, L"0", L"100");
+    SendMessage(susTexWnd, TBM_SETPOS, TRUE, susTexFactor / SUSTEXFORCE_MULTIPLIER);
+    SendMessage(susTexWnd, TBM_SETPOSNOTIFY, 0, susTexFactor / SUSTEXFORCE_MULTIPLIER);
+
+    slider(&susLoadWnd, L"Suspension load:", 360, L"0", L"100");
+    SendMessage(susLoadWnd, TBM_SETPOS, TRUE, susLoadFactor / SUSLOADFORCE_MULTIPLIER);
+    SendMessage(susLoadWnd, TBM_SETPOSNOTIFY, 0, susLoadFactor / SUSLOADFORCE_MULTIPLIER);
+
+    use360Wnd = CreateWindowExW(
+        NULL, L"BUTTON", L" Use 360 Hz telemetry for suspension effects\r\n in direct modes?",
+        BS_CHECKBOX | BS_MULTILINE | WS_CHILD | WS_VISIBLE,
+        30, 440, 360, 58, mainWnd, nullptr, hInstance, nullptr
+    );
+    if (use360ForDirect)
+        SendMessage(use360Wnd, BM_SETCHECK, BST_CHECKED, NULL);
+
+    if (ffb == FFBTYPE_DIRECT_FILTER)
+        EnableWindow(minWnd, false);
+    else
+        EnableWindow(use360Wnd, false);
 
     textWnd = CreateWindowEx(
         WS_EX_CLIENTEDGE, L"EDIT", L"",
         WS_VISIBLE | WS_VSCROLL | WS_CHILD | ES_LEFT | ES_MULTILINE | ES_AUTOVSCROLL,
-        16, 442, 384, 240,
+        16, 512, 384, 240,
         mainWnd, NULL, hInstance, NULL
     );
     SendMessage(textWnd, EM_SETLIMITTEXT, WPARAM(256000), 0);
 
-    testWnd = CreateWindowEx(
-        0, L"BUTTON", L"Blind Test",
-        WS_VISIBLE | WS_CHILD | WS_TABSTOP | BS_PUSHBUTTON,
-        300, 700, 100, 24, mainWnd, NULL, hInst, NULL
-    );
-
-    text(L"iRacing Telemetry FFB Test");
+    text(L"irFFB");
 
     ShowWindow(mainWnd, nCmdShow);
     UpdateWindow(mainWnd);
@@ -831,47 +695,43 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                         }
                         else if ((HWND)lParam == ffbWnd) {
 
-                            ffb = origFFB = (int)SendMessage(ffbWnd, CB_GETCURSEL, 0, 0);
-                            EnableWindow(delayWnd, ffb == FFBTYPE_60HZ ? true : false);
+                            ffb = (int)SendMessage(ffbWnd, CB_GETCURSEL, 0, 0);
 
-                            if (ffb == FFBTYPE_DIRECT || ffb == FFBTYPE_DIRECT_FILTER)
+                            if (ffb == FFBTYPE_DIRECT_FILTER) {
                                 FfbStart(vjDev);
-                            else
+                                EnableWindow(minWnd, false);
+                                EnableWindow(use360Wnd, true);
+                            }
+                            else {
                                 FfbStop(vjDev);
+                                EnableWindow(minWnd, true);
+                                EnableWindow(use360Wnd, false);
+                            }
 
                         }
-                        else if ((HWND)lParam == cmpWnd)
-                            testFFB = (int)SendMessage(cmpWnd, CB_GETCURSEL, 0, 0);
-
+ 
                     }
                     else if (HIWORD(wParam) == BN_CLICKED) {
-
-                        if ((HWND)lParam == testWnd) {
-                            if (testNum == MAX_TESTS + 1)
-                                startTest();
-                            else
-                                endTest();
+                        if ((HWND)lParam == use360Wnd) {
+                            bool oldValue = SendMessage((HWND)lParam, BM_GETCHECK, 0, 0) == BST_CHECKED;
+                            use360ForDirect = !oldValue;
+                            SendMessage((HWND)lParam, BM_SETCHECK, use360ForDirect, 0);
                         }
-
                     }
-
                     return DefWindowProc(hWnd, message, wParam, lParam);
             }
         }
         break;
 
         case WM_HSCROLL: {
-
             if ((HWND)lParam == maxWnd)
                 maxForce = (SendMessage((HWND)lParam, TBM_GETPOS, 0, 0));
             else if ((HWND)lParam == minWnd)
                 minForce = (SendMessage((HWND)lParam, TBM_GETPOS, 0, 0)) * MINFORCE_MULTIPLIER;
-            else if ((HWND)lParam == delayWnd) {
-                delayTicks = (SendMessage((HWND)lParam, TBM_GETPOS, 0, 0));
-                write = 0;
-                read = -delayTicks;
-            }
-
+            else if ((HWND)lParam == susTexWnd)
+                susTexFactor = (SendMessage((HWND)lParam, TBM_GETPOS, 0, 0)) * SUSTEXFORCE_MULTIPLIER;
+            else if ((HWND)lParam == susLoadWnd)
+                susLoadFactor = (SendMessage((HWND)lParam, TBM_GETPOS, 0, 0)) * SUSLOADFORCE_MULTIPLIER;
         }
         break;
 
@@ -957,6 +817,9 @@ BOOL CALLBACK EnumFFDevicesCallback(LPCDIDEVICEINSTANCE diDevInst, VOID *wnd) {
 
     if (ffdeviceIdx == MAX_FFB_DEVICES)
         return false;
+    
+    if (lstrcmp(diDevInst->tszProductName, L"vJoy Device") == 0)
+        return true;
 
     ffdevices[ffdeviceIdx] = diDevInst->guidInstance;
     SendMessage((HWND)wnd, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(diDevInst->tszProductName));
@@ -1077,6 +940,7 @@ void initDirectInput() {
 
     if (FAILED(ffdevice->CreateEffect(GUID_Sine, &dieff, &effect, nullptr))) {
         text(L"Failed to create sine periodic effect");
+        text(L"Did you select the correct device and is it powered on and connected?");
         return;
     }
 
@@ -1118,8 +982,7 @@ inline void sleepSpinUntil(PLARGE_INTEGER base, UINT sleep, UINT offset) {
 
 inline int scaleTorque(float t) {
 
-    t *= 10000;
-    t /= maxForce;
+    t *= DI_MAX / maxForce;
 
     if (minForce) {
         if (t > 0 && t < minForce)
@@ -1140,6 +1003,9 @@ inline void setFFB(int mag) {
     if (mag < -DI_MAX) mag = -DI_MAX;
     else if (mag > DI_MAX) mag = DI_MAX;
 
+    if (stopped)
+        mag /= 4;
+
     pforce.lOffset = mag;
 
     effect->SetParameters(&dieff, DIEP_TYPESPECIFICPARAMS | DIEP_NORESTART);
@@ -1152,7 +1018,7 @@ void CALLBACK vjFFBCallback(PVOID ffbPacket, PVOID data) {
     FFB_EFF_CONSTANT constEffect;
     int16_t mag;
 
-    if (ffb != FFBTYPE_DIRECT && ffb != FFBTYPE_DIRECT_FILTER)
+    if (ffb != FFBTYPE_DIRECT_FILTER)
         return;
 
     // Only interested in constant force reports
@@ -1203,9 +1069,19 @@ bool initVJD() {
             goto NEXT;
         if (!GetVJDAxisExist(vjDev, HID_USAGE_X))
             goto NEXT;
-        if (!IsDeviceFfb(vjDev) || !IsDeviceFfbEffect(vjDev, HID_USAGE_CONST))
+        if (!IsDeviceFfb(vjDev))
             goto NEXT;
-
+        if (
+            !IsDeviceFfbEffect(vjDev, HID_USAGE_CONST) ||
+            !IsDeviceFfbEffect(vjDev, HID_USAGE_SINE)  ||
+            !IsDeviceFfbEffect(vjDev, HID_USAGE_DMPR)  ||
+            !IsDeviceFfbEffect(vjDev, HID_USAGE_FRIC)  ||
+            !IsDeviceFfbEffect(vjDev, HID_USAGE_SPRNG)
+        ) { 
+            text(L"vjDev %d: Not all required FFB effects are enabled", vjDev);
+            text(L"Enable all FFB effects to use this device");
+            goto NEXT;
+        }     
         break;
 
 NEXT:
@@ -1215,6 +1091,7 @@ NEXT:
 
     if (vjDev > maxVjDev) {
         text(L"Failed to find suitable vJoy device!");
+        text(L"Create a device with an X axis and all FFB effects enabled");
         return false;
     }
 
@@ -1255,19 +1132,25 @@ void readSettings() {
                 devGuid = GUID_NULL;
         if (RegGetValue(regKey, nullptr, L"ffb", RRF_RT_REG_DWORD, nullptr, &ffb, &sz))
             ffb = FFBTYPE_60HZ;
-        if (RegGetValue(regKey, nullptr, L"testFFB", RRF_RT_REG_DWORD, nullptr, &testFFB, &sz))
-            testFFB = FFBTYPE_360HZ;
         if (RegGetValue(regKey, nullptr, L"maxForce", RRF_RT_REG_DWORD, nullptr, &maxForce, &sz))
             maxForce = 45;
         if (RegGetValue(regKey, nullptr, L"minForce", RRF_RT_REG_DWORD, nullptr, &minForce, &sz))
             minForce = 0;
+        if (RegGetValue(regKey, nullptr, L"susTexFactor", RRF_RT_REG_DWORD, nullptr, &susTexFactor, &sz))
+            susTexFactor = 0;
+        if (RegGetValue(regKey, nullptr, L"susLoadFactor", RRF_RT_REG_DWORD, nullptr, &susLoadFactor, &sz))
+            susLoadFactor = 0;
+        if (RegGetValue(regKey, nullptr, L"use360ForDirect", RRF_RT_REG_DWORD, nullptr, &use360ForDirect, &sz))
+            use360ForDirect = true;
 
     }
     else {
-        ffb = FFBTYPE_60HZ;
-        testFFB = FFBTYPE_360HZ;
+        ffb = FFBTYPE_DIRECT_FILTER;
         minForce = 0;
         maxForce = 45;
+        susTexFactor = 0;
+        susLoadFactor = 0;
+        use360ForDirect = true;
     }
 
 }
@@ -1289,10 +1172,12 @@ void writeSettings() {
             int len = (lstrlenW(guid) + 1) * sizeof(wchar_t);
             RegSetValueEx(regKey, L"device", 0, REG_SZ, (BYTE *)guid, len);
         }
-        RegSetValueEx(regKey, L"ffb",      0, REG_DWORD, (BYTE *)&ffb,      sz);
-        RegSetValueEx(regKey, L"testFFB",  0, REG_DWORD, (BYTE *)&testFFB,  sz);
-        RegSetValueEx(regKey, L"maxForce", 0, REG_DWORD, (BYTE *)&maxForce, sz);
-        RegSetValueEx(regKey, L"minForce", 0, REG_DWORD, (BYTE *)&minForce, sz);
+        RegSetValueEx(regKey, L"ffb",        0, REG_DWORD, (BYTE *)&ffb,        sz);
+        RegSetValueEx(regKey, L"susTexFactor", 0, REG_DWORD, (BYTE *)&susTexFactor, sz);
+        RegSetValueEx(regKey, L"susLoadFactor", 0, REG_DWORD, (BYTE *)&susLoadFactor, sz);
+        RegSetValueEx(regKey, L"maxForce",   0, REG_DWORD, (BYTE *)&maxForce,   sz);
+        RegSetValueEx(regKey, L"minForce",   0, REG_DWORD, (BYTE *)&minForce,   sz);
+        RegSetValueEx(regKey, L"use360ForDirect", 0, REG_DWORD, (BYTE *)&use360ForDirect, sz);
 
     }
 

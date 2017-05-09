@@ -310,6 +310,9 @@ int APIENTRY wWinMain(
             data = (char *)malloc(dataLen);
             text(L"New session");
 
+            // Inform iRacing of the maxForce setting
+            irsdk_broadcastMsg(irsdk_BroadcastFFBCommand, irsdk_FFBCommand_MaxForce, (float)maxForce);
+
             swTorque = floatvarptr(data, "SteeringWheelTorque");
             swTorqueST = floatvarptr(data, "SteeringWheelTorque_ST");
             steer = floatvarptr(data, "SteeringWheelAngle");
@@ -630,9 +633,7 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow) {
     if (use360ForDirect)
         SendMessage(use360Wnd, BM_SETCHECK, BST_CHECKED, NULL);
 
-    if (ffb == FFBTYPE_DIRECT_FILTER)
-        EnableWindow(minWnd, false);
-    else
+    if (ffb != FFBTYPE_DIRECT_FILTER)
         EnableWindow(use360Wnd, false);
 
     textWnd = CreateWindowEx(
@@ -683,17 +684,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                         else if ((HWND)lParam == ffbWnd) {
 
                             ffb = (int)SendMessage(ffbWnd, CB_GETCURSEL, 0, 0);
-
-                            if (ffb == FFBTYPE_DIRECT_FILTER) {
-                                FfbStart(vjDev);
-                                EnableWindow(minWnd, false);
-                                EnableWindow(use360Wnd, true);
-                            }
-                            else {
-                                FfbStop(vjDev);
-                                EnableWindow(minWnd, true);
-                                EnableWindow(use360Wnd, false);
-                            }
+                            EnableWindow(use360Wnd, ffb == FFBTYPE_DIRECT_FILTER);
 
                         }
  
@@ -711,8 +702,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         break;
 
         case WM_HSCROLL: {
-            if ((HWND)lParam == maxWnd)
+            if ((HWND)lParam == maxWnd) {
                 maxForce = (SendMessage((HWND)lParam, TBM_GETPOS, 0, 0));
+                irsdk_broadcastMsg(
+                    irsdk_BroadcastFFBCommand, irsdk_FFBCommand_MaxForce, (float)maxForce
+                );
+            }
             else if ((HWND)lParam == minWnd)
                 minForce = (SendMessage((HWND)lParam, TBM_GETPOS, 0, 0)) * MINFORCE_MULTIPLIER;
             else if ((HWND)lParam == susTexWnd)

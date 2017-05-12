@@ -836,7 +836,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         case WM_HSCROLL: {
             if ((HWND)lParam == maxWnd) {
                 maxForce = (SendMessage((HWND)lParam, TBM_GETPOS, 0, 0));
-                scaleFactor = DI_MAX / maxForce;
+                scaleFactor = (float)DI_MAX / maxForce;
                 irsdk_broadcastMsg(
                     irsdk_BroadcastFFBCommand, irsdk_FFBCommand_MaxForce, (float)maxForce
                 );
@@ -1249,7 +1249,7 @@ void readSettings() {
             ffb = FFBTYPE_DIRECT_FILTER;
         if (RegGetValue(regKey, nullptr, L"maxForce", RRF_RT_REG_DWORD, nullptr, &maxForce, &sz))
             maxForce = 45;
-        scaleFactor = DI_MAX / maxForce;
+        scaleFactor = (float)DI_MAX / maxForce;
         if (RegGetValue(regKey, nullptr, L"minForce", RRF_RT_REG_DWORD, nullptr, &minForce, &sz))
             minForce = 0;
         if (RegGetValue(regKey, nullptr, L"susTexFactor", RRF_RT_REG_DWORD, nullptr, &susTexFactor, &sz))

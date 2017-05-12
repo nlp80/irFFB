@@ -31,7 +31,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #define MAX_FFB_DEVICES 16
 #define DI_MAX 10000
-#define MINFORCE_MULTIPLIER 20
+#define MINFORCE_MULTIPLIER 100
 #define SUSTEXFORCE_MULTIPLIER 160
 #define SUSLOADFORCE_MULTIPLIER 8
 #define STOPS_MAXFORCE_RAD 0.175f // 10 deg

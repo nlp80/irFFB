@@ -243,14 +243,15 @@ int APIENTRY wWinMain(
 
     float *swTorque = nullptr, *swTorqueST = nullptr, *steer = nullptr, *steerMax = nullptr;
     float *speed = nullptr, *throttle = nullptr;
-    float *LFshockDeflST = nullptr, *RFshockDeflST = nullptr;
-    float LFshockDeflLast, RFshockDeflLast, LFshockNom, RFshockNom, FshockNom;
+    float *LFshockDeflST = nullptr, *RFshockDeflST = nullptr, *CFshockDeflST = nullptr;
+    float LFshockDeflLast, RFshockDeflLast, CFshockDeflLast;
+    float LFshockNom, RFshockNom, FshockNom;
     bool *isOnTrack = nullptr;
     int *trackSurface = nullptr;
 
     bool wasOnTrack = false;
     int numHandles = 0, dataLen = 0;
-    int swTSTnumSamples = 0, swTSTmaxIdx = 0;
+    int STnumSamples = 0, STmaxIdx = 0;
     float halfSteerMax = 0, lastTorque = 0, lastSuspForce = 0;
 
     HACCEL hAccelTable = LoadAccelerators(hInstance, MAKEINTRESOURCE(IDC_IRFFB));
@@ -328,10 +329,11 @@ int APIENTRY wWinMain(
 
             RFshockDeflST = floatvarptr(data, "RFshockDefl_ST");
             LFshockDeflST = floatvarptr(data, "LFshockDefl_ST");
+            CFshockDeflST = floatvarptr(data, "CFshockDefl_ST");
 
             int swTorqueSTidx = irsdk_varNameToIndex("SteeringWheelTorque_ST");
-            swTSTnumSamples = irsdk_getVarHeaderEntry(swTorqueSTidx)->count;
-            swTSTmaxIdx = swTSTnumSamples - 1;
+            STnumSamples = irsdk_getVarHeaderEntry(swTorqueSTidx)->count;
+            STmaxIdx = STnumSamples - 1;
 
             lastTorque = 0.0f;
             wasOnTrack = false;
@@ -357,7 +359,7 @@ int APIENTRY wWinMain(
                 wasOnTrack = true;
                 text(L"Is now on track");
                 reacquireDIDevice();
-                RFshockDeflLast = LFshockDeflLast = -10000;
+                RFshockDeflLast = LFshockDeflLast = CFshockDeflLast = -10000;
                 FshockNom = LFshockNom = RFshockNom = 0;
             }
 
@@ -384,10 +386,10 @@ int APIENTRY wWinMain(
                                 // xmm0 = LFdefl[-,1,2,3]
                                 pslldq xmm0, 4
                                 movss xmm4, LFshockDeflLast
-                                // xmm1 = LFdefl[-,1,2,3]
+                                // xmm1 = RFdefl[-,1,2,3]
                                 pslldq xmm1, 4
                                 movss xmm5, RFshockDeflLast
-                                // xmm0 = LSdefl[LFlast,0,1,2]
+                                // xmm0 = LFdefl[LFlast,0,1,2]
                                 movss xmm0, xmm4
                                 // xmm6 = LFdefl[0,1,2,3]
                                 movaps xmm6, xmm2
@@ -505,20 +507,60 @@ int APIENTRY wWinMain(
         
                         }
                         else {
-                            float LFdelta = LFshockDeflST[swTSTmaxIdx] - LFshockDeflLast;
-                            float RFdelta = RFshockDeflST[swTSTmaxIdx] - RFshockDeflLast;
-                            suspForce = (LFdelta - RFdelta) * (susTexFactor / 4);
+                            float LFdelta = LFshockDeflST[STmaxIdx] - LFshockDeflLast;
+                            float RFdelta = RFshockDeflST[STmaxIdx] - RFshockDeflLast;
+                            suspForce = (LFdelta - RFdelta) * susTexFactor * 0.25f;
                             if (FshockNom != 0 && susLoadFactor != 0)
                                 suspForce +=
-                                    ((LFshockDeflST[swTSTmaxIdx] - LFshockNom) - (RFshockDeflST[swTSTmaxIdx] - RFshockNom)) *
-                                        pow((LFshockDeflST[swTSTmaxIdx] + RFshockDeflST[swTSTmaxIdx]) / FshockNom, 8) *
+                                    ((LFshockDeflST[STmaxIdx] - LFshockNom) - (RFshockDeflST[STmaxIdx] - RFshockNom)) *
+                                        pow((LFshockDeflST[STmaxIdx] + RFshockDeflST[STmaxIdx]) / FshockNom, 8) *
                                             susLoadFactor;
                         }
             
                     }
 
-                    RFshockDeflLast = RFshockDeflST[swTSTmaxIdx];
-                    LFshockDeflLast = LFshockDeflST[swTSTmaxIdx];
+                    RFshockDeflLast = RFshockDeflST[STmaxIdx];
+                    LFshockDeflLast = LFshockDeflST[STmaxIdx];
+
+                }
+                else if (CFshockDeflST != nullptr && susTexFactor != 0) {
+
+                    if (CFshockDeflLast != -10000) {
+                    
+                        if (ffb != FFBTYPE_DIRECT_FILTER || use360ForDirect)
+                            __asm {
+                                mov eax, CFshockDeflST
+                                movups xmm0, xmmword ptr[eax]
+                                // xmm3 = susTexFactor
+                                movss xmm3, susTexFactor
+                                // xmm2 = CFdefl[0,1,2,3]
+                                movaps xmm2, xmm0
+                                // xmm0 = CFdefl[-,1,2,3]
+                                pslldq xmm0, 4
+                                movss xmm4, CFshockDeflLast
+                                unpcklps xmm3, xmm3
+                                // xmm0 = CFdefl[CFlast,0,1,2]
+                                movss xmm0, xmm4
+                                // xmm2 = CFdefl[0] - CFlast, CFdefl[1] - CFdefl[0], ...
+                                subps xmm2, xmm0
+                                // xmm4 = CFdefl[3,4,5]
+                                movups xmm4, xmmword ptr[eax + 12]
+                                // xmm1 = CFdefl[4,5]
+                                movlps xmm1, qword ptr[eax + 16]
+                                unpcklps xmm3, xmm3
+                                // xmm1 = CFdefl[4] - CFdefl[3], CFdefl[5] - CFdefl[4]
+                                subps xmm1, xmm4
+                                mulps xmm2, xmm3
+                                mulps xmm1, xmm3
+                                movaps xmmword ptr suspForceST[0], xmm2
+                                movlps qword ptr suspForceST[16], xmm1
+                            }
+                        else 
+                            suspForce = (CFshockDeflST[STmaxIdx] - CFshockDeflLast) * susTexFactor * 0.25f;
+
+                    }
+                    
+                    CFshockDeflLast = CFshockDeflST[STmaxIdx];
 
                 }
 
@@ -531,8 +573,8 @@ int APIENTRY wWinMain(
                     LFshockDeflST != nullptr && RFshockDeflST != nullptr &&
                     *trackSurface == irsdk_InPitStall && *throttle == 0
                 ) {
-                    LFshockNom = LFshockDeflST[swTSTmaxIdx];
-                    RFshockNom = RFshockDeflST[swTSTmaxIdx];
+                    LFshockNom = LFshockDeflST[STmaxIdx];
+                    RFshockNom = RFshockDeflST[STmaxIdx];
                     FshockNom = LFshockNom + RFshockNom;
                 }
             }
@@ -572,13 +614,13 @@ int APIENTRY wWinMain(
 
                     QueryPerformanceCounter(&start);
 
-                    for (int i = 0; i < swTSTmaxIdx; i++) {
+                    for (int i = 0; i < STmaxIdx; i++) {
 
                         setFFB(scaleTorque(swTorqueST[i] + suspForceST[i]));
                         sleepSpinUntil(&start, 2000, 2760 * (i + 1));
 
                     }
-                    setFFB(scaleTorque(swTorqueST[swTSTmaxIdx] + suspForceST[swTSTmaxIdx]));
+                    setFFB(scaleTorque(swTorqueST[STmaxIdx] + suspForceST[STmaxIdx]));
                 }
                 break;
 
@@ -591,7 +633,7 @@ int APIENTRY wWinMain(
                     setFFB(scaleTorque(lastTorque + diff / 2 + lastSuspForce + sdiff / 2));
                     sleepSpinUntil(&start, 0, 1380);
 
-                    for (int i = 0; i < swTSTmaxIdx << 1; i++) {
+                    for (int i = 0; i < STmaxIdx << 1; i++) {
 
                         int idx = i >> 1;
 
@@ -607,9 +649,9 @@ int APIENTRY wWinMain(
 
                     }
 
-                    setFFB(scaleTorque(swTorqueST[swTSTmaxIdx] + suspForceST[swTSTmaxIdx]));
-                    lastTorque = swTorqueST[swTSTmaxIdx];
-                    lastSuspForce = suspForceST[swTSTmaxIdx];
+                    setFFB(scaleTorque(swTorqueST[STmaxIdx] + suspForceST[STmaxIdx]));
+                    lastTorque = swTorqueST[STmaxIdx];
+                    lastSuspForce = suspForceST[STmaxIdx];
 
                 }
                 break;

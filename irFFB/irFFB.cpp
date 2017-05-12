@@ -1056,6 +1056,7 @@ void initDirectInput() {
 
     if (FAILED(pDI->CreateDevice(devGuid, &ffdevice, nullptr))) {
         text(L"Failed to create DI device");
+        text(L"Is it connected and powered on?");
         return;
     }
     if (FAILED(ffdevice->SetDataFormat(&c_dfDIJoystick))) {
@@ -1097,7 +1098,7 @@ void initDirectInput() {
 
     if (FAILED(ffdevice->CreateEffect(GUID_Sine, &dieff, &effect, nullptr))) {
         text(L"Failed to create sine periodic effect");
-        text(L"Did you select the correct device and is it powered on and connected?");
+        text(L"Did you select the correct device?");
         return;
     }
 

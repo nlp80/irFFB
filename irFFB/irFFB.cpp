@@ -336,6 +336,7 @@ int APIENTRY wWinMain(
             STmaxIdx = STnumSamples - 1;
 
             lastTorque = 0.0f;
+            FshockNom = LFshockNom = RFshockNom = 0;
             wasOnTrack = false;
             irConnected = true;
 
@@ -360,7 +361,6 @@ int APIENTRY wWinMain(
                 text(L"Is now on track");
                 reacquireDIDevice();
                 RFshockDeflLast = LFshockDeflLast = CFshockDeflLast = -10000;
-                FshockNom = LFshockNom = RFshockNom = 0;
             }
 
             if (*speed > 1) {
@@ -571,7 +571,7 @@ int APIENTRY wWinMain(
                 stopped = true;
                 if (
                     LFshockDeflST != nullptr && RFshockDeflST != nullptr &&
-                    *trackSurface == irsdk_InPitStall && *throttle == 0
+                    *trackSurface == irsdk_InPitStall && *throttle == 0 && FshockNom == 0
                 ) {
                     LFshockNom = LFshockDeflST[STmaxIdx];
                     RFshockNom = RFshockDeflST[STmaxIdx];

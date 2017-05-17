@@ -32,8 +32,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MAX_FFB_DEVICES 16
 #define DI_MAX 10000
 #define MINFORCE_MULTIPLIER 100
-#define SUSTEXFORCE_MULTIPLIER 160
-#define SUSLOADFORCE_MULTIPLIER 8
+#define SUSTEXFORCE_MULTIPLIER 1.6f
+#define SUSLOADFORCE_MULTIPLIER 0.08f
+#define LONGLOAD_STDPOWER 4
+#define LONGLOAD_MAXPOWER 8
 #define STOPS_MAXFORCE_RAD 0.175f // 10 deg
 #define DIRECT_INTERP_SAMPLES 6
 #define KEY_PATH L"Software\\irFFB\\Settings"
@@ -93,7 +95,7 @@ float susTexFactor = 0, susLoadFactor = 0;
 float scaleFactor = 0;
 volatile float suspForce = 0;
 __declspec(align(16)) volatile float suspForceST[DIRECT_INTERP_SAMPLES];
-bool stopped = true, use360ForDirect = true;
+bool stopped = true, use360ForDirect = true, extraLongLoad = false;
 
 int numButtons, numPov;
 
@@ -101,7 +103,7 @@ HANDLE wheelEvent = CreateEvent(nullptr, false, false, L"WheelEvent");
 HANDLE ffbEvent   = CreateEvent(nullptr, false, false, L"FFBEvent");
 
 HWND mainWnd, textWnd, devWnd, ffbWnd;
-HWND minWnd, maxWnd, susTexWnd, susLoadWnd, use360Wnd;
+HWND minWnd, maxWnd, susTexWnd, susLoadWnd, use360Wnd, extraLongWnd;
 
 LARGE_INTEGER freq;
 
@@ -244,12 +246,11 @@ int APIENTRY wWinMain(
     float *swTorque = nullptr, *swTorqueST = nullptr, *steer = nullptr, *steerMax = nullptr;
     float *speed = nullptr, *throttle = nullptr;
     float *LFshockDeflST = nullptr, *RFshockDeflST = nullptr, *CFshockDeflST = nullptr;
-    float LFshockDeflLast, RFshockDeflLast, CFshockDeflLast;
-    float LFshockNom, RFshockNom, FshockNom;
+    float LFshockDeflLast, RFshockDeflLast, CFshockDeflLast, FshockNom;
     bool *isOnTrack = nullptr;
     int *trackSurface = nullptr;
 
-    bool wasOnTrack = false;
+    bool wasOnTrack = false, shockNomSet = false;
     int numHandles = 0, dataLen = 0;
     int STnumSamples = 0, STmaxIdx = 0;
     float halfSteerMax = 0, lastTorque = 0, lastSuspForce = 0;
@@ -336,8 +337,8 @@ int APIENTRY wWinMain(
             STmaxIdx = STnumSamples - 1;
 
             lastTorque = 0.0f;
-            FshockNom = LFshockNom = RFshockNom = 0;
-            wasOnTrack = false;
+            FshockNom = 0;
+            wasOnTrack = shockNomSet = false;
             irConnected = true;
 
         }
@@ -358,12 +359,12 @@ int APIENTRY wWinMain(
 
             else if (!wasOnTrack && *isOnTrack) {
                 wasOnTrack = true;
+                RFshockDeflLast = LFshockDeflLast = CFshockDeflLast = -10000;
                 text(L"Is now on track");
                 reacquireDIDevice();
-                RFshockDeflLast = LFshockDeflLast = CFshockDeflLast = -10000;
             }
 
-            if (*speed > 1) {
+            if (*speed > 1) {              
 
                 if (
                     LFshockDeflST != nullptr && RFshockDeflST != nullptr &&
@@ -425,96 +426,113 @@ int APIENTRY wWinMain(
                                 mulps xmm1, xmm3
                                 movaps xmmword ptr suspForceST[0], xmm2
                                 movlps qword ptr suspForceST[16], xmm1
-                               
+                                movss xmm3, FshockNom
+                                movss xmm2, susLoadFactor
+                                xorps xmm1, xmm1
+                                ucomiss xmm3, xmm1
+                                jz end
+                                ucomiss xmm2, xmm1
+                                jz end    
+                                
+                                // xmm6 = LFdefl[0,1,2,3]
+                                // xmm7 = RFdefl[0,1,2,3]
+                                // xmm4 = LFdefl[3,4,5]
+                                // xmm5 = RFdefl[3,4,5]
+                                // xmm3 = FshockNom
+                                // eax = 2.0f
+                                mov eax, 0x40000000
+                                // xmm0 = FshockNom 
+                                movaps xmm0, xmm3
+                                movd xmm2, eax
+                                // xmm1 = LFdefl[0,1,2,3]
+                                movaps xmm1, xmm6
+                                // xmm0 = FshockNom / 2
+                                divss xmm0, xmm2
+                                unpcklps xmm3, xmm3
+                                // xmm2 = RFdefl[0,1,2,3]
+                                movaps xmm2, xmm7
+                                unpcklps xmm0, xmm0
+                                unpcklps xmm0, xmm0
+                                // xmm6 = LFdefl[0,1,2,3] - FshockNom/2
+                                subps xmm6, xmm0
+                                unpcklps xmm3, xmm3
+                                // xmm7 = RFdefl[0,1,2,3] - FshockNom/2
+                                subps xmm7, xmm0
+                                // xmm4 = LFdefl[4,5]
+                                psrldq xmm4, 4
+                                // xmm6 = (LFdefl - FshockNom/2) - (RFdefl - FshockNom/2)[0,1,2,3]
+                                subps xmm6, xmm7
+                                // xmm7 = LFdefl[4,5]
+                                movaps xmm7, xmm4
+                                // xmm5 = RFdefl[4,5]
+                                psrldq xmm5, 4
+                                // xmm4 = LFdefl[4,5] - FshockNom/2
+                                subps xmm4, xmm0
+                                // xmm7 = LFdefl + RFdefl [4,5]
+                                addps xmm7, xmm5
+                                // xmm5 = RFdefl[4,5] - FshockNom/2
+                                subps xmm5, xmm0
+                                // xmm1 = LFdefl + RFdefl [0,1,2,3]
+                                addps xmm1, xmm2
+                                // xmm4 = (LFdefl - FshockNom/2) - (RFdefl - FshockNom/2)[4,5]
+                                subps xmm4, xmm5
+                                movss xmm5, susLoadFactor
+                                // xmm1 = LFdefl + RFdefl / FshockNom [0,1,2,3]
+                                divps xmm1, xmm3
+                                unpcklps xmm5, xmm5
+                                // xmm7 = LFdefl + RFdefl / FshockNom [4,5]
+                                divps xmm7, xmm3
+                                // xmm7 = (LFdefl + RFdefl / FshockNom) ^ 4 [4,5] 
+                                // xmm1 = (LFdefl + RFdefl / FshockNom) ^ 4 [0,1,2,3] 
+                                mulps xmm1, xmm1
+                                mov eax, dword ptr extraLongLoad
+                                mulps xmm7, xmm7
+                                unpcklps xmm5, xmm5
+                                mulps xmm1, xmm1
+                                test eax, eax
+                                mulps xmm7, xmm7
+                                jz upd
+                                mulps xmm1, xmm1
+                                mulps xmm7, xmm7
+                            upd:                       
+                                // xmm1 = ((LFdefl - LFnom) - (RFdefl - RFnom)) * ((LFdefl + RFdefl) / Fnom) ^ 4) [0,1,2,3]
+                                mulps xmm1, xmm6
+                                movaps xmm2, xmmword ptr suspForceST[0]
+                                // xmm7 = ((LFdefl - LFnom) - (RFdefl - RFnom)) * ((LFdefl + RFdefl) / Fnom) ^ 4) [4,5]
+                                mulps xmm7, xmm4
+                                // xmm1 *= susLoadFactor
+                                mulps xmm1, xmm5
+                                movlps xmm3, qword ptr suspForceST[16]
+                                // xmm7 *= susLoadFactor
+                                mulps xmm7, xmm5
+                                // add to suspForceST
+                                addps xmm2, xmm1
+                                addps xmm3, xmm7
+                                // write
+                                movaps xmmword ptr suspForceST[0], xmm2
+                                movlps qword ptr suspForceST[16], xmm3
+
+                            end:
+
                             }
-                            
-                            if (FshockNom != 0 && susLoadFactor != 0)
-                                __asm {
-                                    // xmm6 = LFdefl[0,1,2,3]
-                                    // xmm7 = RFdefl[0,1,2,3]
-                                    // xmm4 = LFdefl[3,4,5]
-                                    // xmm5 = RFdefl[3,4,5]
-                                    movss xmm0, LFshockNom
-                                    movss xmm3, RFshockNom
-                                    unpcklps xmm0, xmm0
-                                    // xmm1 = LFdefl[0,1,2,3]
-                                    movaps xmm1, xmm6
-                                    unpcklps xmm3, xmm3
-                                    unpcklps xmm0, xmm0
-                                    // xmm2 = RFdefl[0,1,2,3]
-                                    movaps xmm2, xmm7
-                                    unpcklps xmm3, xmm3
-                                    // xmm6 = LFdefl[0,1,2,3] - LFshockNom
-                                    subps xmm6, xmm0
-                                    // xmm7 = RFdefl[0,1,2,3] - RFshockNom
-                                    subps xmm7, xmm3
-                                    // xmm4 = LFdefl[4,5]
-                                    psrldq xmm4, 4
-                                    // xmm6 = (LFdefl - LFshockNom) - (RFdefl - RFshockNom)[0,1,2,3]
-                                    subps xmm6, xmm7
-                                    // xmm7 = LFdefl[4,5]
-                                    movaps xmm7, xmm4
-                                    // xmm5 = RFdefl[4,5]
-                                    psrldq xmm5, 4
-                                    // xmm4 = LFdefl[4,5] - LFshockNom
-                                    subps xmm4, xmm0
-                                    // xmm0 = RFdefl[4,5]
-                                    movaps xmm0, xmm5
-                                    // xmm5 = RFdefl[4,5] - RFshockNom
-                                    subps xmm5, xmm3
-                                    // xmm1 = LFdefl + RFdefl [0,1,2,3]
-                                    addps xmm1, xmm2
-                                    // xmm3 = FshockNom
-                                    movss xmm3, FshockNom
-                                    // xmm4 = (LFdefl - LFshockNom) - (RFdefl - RFshockNom)[4,5]
-                                    subps xmm4, xmm5
-                                    unpcklps xmm3, xmm3
-                                    // xmm0 = LFdefl + RFdefl [4, 5]
-                                    addps xmm0, xmm7
-                                    unpcklps xmm3, xmm3
-                                    movss xmm5, susLoadFactor
-                                    // xmm1 = LFdefl + RFdefl / FshockNom [0,1,2,3]
-                                    divps xmm1, xmm3
-                                    unpcklps xmm5, xmm5
-                                    // xmm0 = LFdefl + RFdefl / FshockNom [4,5]
-                                    divps xmm0, xmm3
-                                    // xmm0 = (LFdefl + RFdefl / FshockNom) ^ 8 [4,5] 
-                                    // xmm1 = (LFdefl + RFdefl / FshockNom) ^ 8 [0,1,2,3] 
-                                    mulps xmm1, xmm1
-                                    mulps xmm0, xmm0
-                                    mulps xmm1, xmm1
-                                    unpcklps xmm5, xmm5
-                                    mulps xmm0, xmm0
-                                    mulps xmm1, xmm1
-                                    mulps xmm0, xmm0
-                                    // xmm1 = ((LFdefl - LFnom) - (RFdefl - RFnom)) * ((LFdefl + RFdefl) / Fnom) ^ 8) [0,1,2,3]
-                                    mulps xmm1, xmm6
-                                    movaps xmm2, xmmword ptr suspForceST[0]
-                                    // xmm0 = ((LFdefl - LFnom) - (RFdefl - RFnom)) * ((LFdefl + RFdefl) / Fnom) ^ 8) [4,5]
-                                    mulps xmm0, xmm4
-                                    // xmm1 *= susLoadFactor
-                                    mulps xmm1, xmm5
-                                    movlps xmm3, qword ptr suspForceST[16]
-                                    // xmm0 *= susLoadFactor
-                                    mulps xmm0, xmm5
-                                    // add to suspForceST
-                                    addps xmm2, xmm1
-                                    addps xmm3, xmm0
-                                    // write
-                                    movaps xmmword ptr suspForceST[0], xmm2
-                                    movlps qword ptr suspForceST[16], xmm3
-                                }
         
                         }
                         else {
-                            float LFdelta = LFshockDeflST[STmaxIdx] - LFshockDeflLast;
-                            float RFdelta = RFshockDeflST[STmaxIdx] - RFshockDeflLast;
-                            suspForce = (LFdelta - RFdelta) * susTexFactor * 0.25f;
-                            if (FshockNom != 0 && susLoadFactor != 0)
+                            suspForce = 
+                                (
+                                    (LFshockDeflST[STmaxIdx] - LFshockDeflLast) -
+                                    (RFshockDeflST[STmaxIdx] - RFshockDeflLast)
+                                ) * susTexFactor * 0.25f;
+
+                            if (FshockNom != 0 && susLoadFactor != 0) {
+                                float FshockAvg = FshockNom / 2;
                                 suspForce +=
-                                    ((LFshockDeflST[STmaxIdx] - LFshockNom) - (RFshockDeflST[STmaxIdx] - RFshockNom)) *
-                                        pow((LFshockDeflST[STmaxIdx] + RFshockDeflST[STmaxIdx]) / FshockNom, 8) *
-                                            susLoadFactor;
+                                    ((LFshockDeflST[STmaxIdx] - FshockAvg) - (RFshockDeflST[STmaxIdx] - FshockAvg)) *
+                                        pow(
+                                            (LFshockDeflST[STmaxIdx] + RFshockDeflST[STmaxIdx]) / FshockNom,
+                                            extraLongLoad ? LONGLOAD_MAXPOWER : LONGLOAD_STDPOWER
+                                        ) * susLoadFactor;
+                            }
                         }
             
                     }
@@ -565,18 +583,17 @@ int APIENTRY wWinMain(
                 }
 
                 stopped = false;
+                if (FshockNom != 0)
+                    shockNomSet = true;
 
             }
             else {
                 stopped = true;
                 if (
                     LFshockDeflST != nullptr && RFshockDeflST != nullptr &&
-                    *trackSurface == irsdk_InPitStall && *throttle == 0 && FshockNom == 0
-                ) {
-                    LFshockNom = LFshockDeflST[STmaxIdx];
-                    RFshockNom = RFshockDeflST[STmaxIdx];
-                    FshockNom = LFshockNom + RFshockNom;
-                }
+                    *trackSurface == irsdk_InPitStall && *throttle == 0 && !shockNomSet
+                )
+                    FshockNom = LFshockDeflST[STmaxIdx] + RFshockDeflST[STmaxIdx];
             }
 
             if (!*isOnTrack || ffb == FFBTYPE_DIRECT_FILTER)
@@ -765,7 +782,7 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow) {
     mainWnd = CreateWindowW(
         szWindowClass, szTitle,
         WS_OVERLAPPEDWINDOW,
-        CW_USEDEFAULT, CW_USEDEFAULT, 432, 840,
+        CW_USEDEFAULT, CW_USEDEFAULT, 432, 868,
         NULL, NULL, hInstance, NULL
     );
 
@@ -792,17 +809,25 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow) {
     SendMessage(maxWnd, TBM_SETPOSNOTIFY, 0, maxForce);
 
     slider(&susTexWnd, L"Suspension bumps:", 288, L"0", L"100");
-    SendMessage(susTexWnd, TBM_SETPOS, TRUE, (int)(susTexFactor / SUSTEXFORCE_MULTIPLIER));
-    SendMessage(susTexWnd, TBM_SETPOSNOTIFY, 0, (int)(susTexFactor / SUSTEXFORCE_MULTIPLIER));
+    SendMessage(susTexWnd, TBM_SETPOS, TRUE, (int)sqrt(susTexFactor / SUSTEXFORCE_MULTIPLIER));
+    SendMessage(susTexWnd, TBM_SETPOSNOTIFY, 0, (int)sqrt(susTexFactor / SUSTEXFORCE_MULTIPLIER));
 
     slider(&susLoadWnd, L"Suspension load:", 360, L"0", L"100");
-    SendMessage(susLoadWnd, TBM_SETPOS, TRUE, (int)(susLoadFactor / SUSLOADFORCE_MULTIPLIER));
-    SendMessage(susLoadWnd, TBM_SETPOSNOTIFY, 0, (int)(susLoadFactor / SUSLOADFORCE_MULTIPLIER));
+    SendMessage(susLoadWnd, TBM_SETPOS, TRUE, (int)sqrt(susLoadFactor / SUSLOADFORCE_MULTIPLIER));
+    SendMessage(susLoadWnd, TBM_SETPOSNOTIFY, 0, (int)sqrt(susLoadFactor / SUSLOADFORCE_MULTIPLIER));
+
+    extraLongWnd = CreateWindowExW(
+        NULL, L"BUTTON", L" Increased longitudinal weight transfer effect?",
+        BS_CHECKBOX | BS_MULTILINE | WS_CHILD | WS_VISIBLE,
+        30, 430, 360, 58, mainWnd, nullptr, hInstance, nullptr
+    );
+    if (extraLongLoad)
+        SendMessage(extraLongWnd, BM_SETCHECK, BST_CHECKED, NULL);
 
     use360Wnd = CreateWindowExW(
         NULL, L"BUTTON", L" Use 360 Hz telemetry for suspension effects\r\n in direct modes?",
         BS_CHECKBOX | BS_MULTILINE | WS_CHILD | WS_VISIBLE,
-        30, 440, 360, 58, mainWnd, nullptr, hInstance, nullptr
+        30, 480, 360, 58, mainWnd, nullptr, hInstance, nullptr
     );
     if (use360ForDirect)
         SendMessage(use360Wnd, BM_SETCHECK, BST_CHECKED, NULL);
@@ -813,7 +838,7 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow) {
     textWnd = CreateWindowEx(
         WS_EX_CLIENTEDGE, L"EDIT", L"",
         WS_VISIBLE | WS_VSCROLL | WS_CHILD | ES_LEFT | ES_MULTILINE | ES_AUTOVSCROLL,
-        16, 512, 384, 240,
+        16, 548, 384, 240,
         mainWnd, NULL, hInstance, NULL
     );
     SendMessage(textWnd, EM_SETLIMITTEXT, WPARAM(256000), 0);
@@ -869,6 +894,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                             use360ForDirect = !oldValue;
                             SendMessage((HWND)lParam, BM_SETCHECK, use360ForDirect, 0);
                         }
+                        else if ((HWND)lParam == extraLongWnd) {
+                            bool oldValue = SendMessage((HWND)lParam, BM_GETCHECK, 0, 0) == BST_CHECKED;
+                            extraLongLoad = !oldValue;
+                            SendMessage((HWND)lParam, BM_SETCHECK, extraLongLoad, 0);
+                        }
                     }
                     return DefWindowProc(hWnd, message, wParam, lParam);
             }
@@ -886,9 +916,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             else if ((HWND)lParam == minWnd)
                 minForce = (SendMessage((HWND)lParam, TBM_GETPOS, 0, 0)) * MINFORCE_MULTIPLIER;
             else if ((HWND)lParam == susTexWnd)
-                susTexFactor = (float)(SendMessage((HWND)lParam, TBM_GETPOS, 0, 0)) * SUSTEXFORCE_MULTIPLIER;
+                susTexFactor = pow((float)(SendMessage((HWND)lParam, TBM_GETPOS, 0, 0)), 2) * SUSTEXFORCE_MULTIPLIER;
             else if ((HWND)lParam == susLoadWnd)
-                susLoadFactor = (float)(SendMessage((HWND)lParam, TBM_GETPOS, 0, 0)) * SUSLOADFORCE_MULTIPLIER;
+                susLoadFactor = pow((float)(SendMessage((HWND)lParam, TBM_GETPOS, 0, 0)), 2) * SUSLOADFORCE_MULTIPLIER;
         }
         break;
 
@@ -1301,6 +1331,8 @@ void readSettings() {
             susLoadFactor = 0;
         if (RegGetValue(regKey, nullptr, L"use360ForDirect", RRF_RT_REG_DWORD, nullptr, &use360ForDirect, &sz))
             use360ForDirect = true;
+        if (RegGetValue(regKey, nullptr, L"extraLongLoad", RRF_RT_REG_DWORD, nullptr, &extraLongLoad, &sz))
+            extraLongLoad = false;
 
     }
     else {
@@ -1311,6 +1343,7 @@ void readSettings() {
         susTexFactor = 0;
         susLoadFactor = 0;
         use360ForDirect = true;
+        extraLongLoad = false;
     }
 
 }
@@ -1338,6 +1371,7 @@ void writeSettings() {
         RegSetValueEx(regKey, L"maxForce",   0, REG_DWORD, (BYTE *)&maxForce,   sz);
         RegSetValueEx(regKey, L"minForce",   0, REG_DWORD, (BYTE *)&minForce,   sz);
         RegSetValueEx(regKey, L"use360ForDirect", 0, REG_DWORD, (BYTE *)&use360ForDirect, sz);
+        RegSetValueEx(regKey, L"extraLongLoad", 0, REG_DWORD, (BYTE *)&extraLongLoad, sz);
 
     }
 

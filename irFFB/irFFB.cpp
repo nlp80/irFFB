@@ -520,11 +520,11 @@ int APIENTRY wWinMain(
                                 // xmm7 = (LFdefl + RFdefl / Fnom) ^ 4 [4,5] 
                                 // xmm1 = (LFdefl + RFdefl / Fnom) ^ 4 [0,1,2,3] 
                                 mulps xmm1, xmm1
-                                mov eax, dword ptr extraLongLoad
+                                mov al, byte ptr extraLongLoad
                                 mulps xmm7, xmm7
                                 unpcklps xmm5, xmm5
                                 mulps xmm1, xmm1
-                                test eax, eax
+                                test al, al
                                 mulps xmm7, xmm7
                                 jz upd
                                 mulps xmm1, xmm1

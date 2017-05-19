@@ -156,9 +156,12 @@
   <ItemGroup>
     <ClCompile Include="irFFB.cpp" />
     <ClCompile Include="irsdk_utils.cpp" />
+    <ClCompile Include="settings.cpp" />
     <ClCompile Include="stdafx.cpp" />
+    <ClCompile Include="yaml_parser.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Settings.h" />
     <ClInclude Include="irFFB.h" />
     <ClInclude Include="irsdk_defines.h" />
     <ClInclude Include="public.h" />
@@ -166,6 +169,7 @@
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="targetver.h" />
     <ClInclude Include="vjoyinterface.h" />
+    <ClInclude Include="yaml_parser.h" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="irFFB.ico" />

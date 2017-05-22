@@ -473,13 +473,13 @@ void JetSeat::stopEngineEffect() {
 
 void JetSeat::updateEngineEffect(float rpmPerCent) {
 
+    if (engineGain == 0 || !engineOn || engineCounter++ < 10)
+        return;
+
     UINT intervalsOn[2];
     UINT intervalsOff[2];
     BYTE amps[2] = { 0, 0 };
     BYTE ampsZero[2] = { 0, 0 };
-
-    if (engineGain == 0 || !engineOn || engineCounter++ < 10)
-        return;
 
     engineCounter = 0;
 
@@ -535,9 +535,9 @@ void JetSeat::yawEffect(float f) {
     if (yawGain == 0.0f)
         return;
     if (f > 0.0f)
-        startEffect(GW_SLIDE_LEFT, f * yawGain, 3);
+        startEffect(GW_SLIDE_LEFT, f * 4.0f * yawGain, 3);
     else
-        startEffect(GW_SLIDE_RIGHT, -f * yawGain, 3);
+        startEffect(GW_SLIDE_RIGHT, -f * 4.0f * yawGain, 3);
 }
 
 void JetSeat::readSettings() {

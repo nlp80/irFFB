@@ -56,76 +56,35 @@ void Fan::createWindow(HINSTANCE hInst) {
 
     mainWnd = CreateWindowW(
         windowClass, windowClass, WS_SYSMENU | WS_VISIBLE | WS_MINIMIZEBOX | WS_MAXIMIZEBOX,
-        CW_USEDEFAULT, CW_USEDEFAULT, 396, 400,
+        CW_USEDEFAULT, CW_USEDEFAULT, 432, 380,
         NULL, NULL, hInst, NULL
     );
 
     if (!mainWnd)
         return;
 
-    windSimFormatWnd = CreateWindowEx(
-        0, L"BUTTON", L"Use WindSim format?",
-        BS_CHECKBOX | BS_MULTILINE | WS_CHILD | WS_VISIBLE,
-        40, 20, 180, 58, mainWnd, nullptr, hInst, nullptr
-    );
+    windSimFormatWnd = checkbox(mainWnd, L"Use WindSim format?", 40, 20);
+    portWnd = combo(mainWnd, L"Fan controller port:", 40, 80);
 
     CreateWindowW(
-        L"STATIC", L"Fan controller port:",
-        WS_CHILD | WS_VISIBLE,
-        40, 80, 300, 20, mainWnd, NULL, hInst, NULL
-    );
-    portWnd = CreateWindowW(
-        L"COMBOBOX", nullptr,
-        CBS_DROPDOWNLIST | WS_CHILD | WS_VISIBLE | WS_OVERLAPPED | WS_TABSTOP,
-        40, 108, 300, 240, mainWnd, nullptr, hInst, nullptr
-    );
-
-    CreateWindowW(
-        L"STATIC", L"Maximum car speed:",
+        L"STATIC", L"Maximum car speed:   (0 = auto)",
         WS_CHILD | WS_VISIBLE,
         40, 160, 300, 20, mainWnd, NULL, hInst, NULL
     );
     maxSpeedWnd = CreateWindowEx(
         WS_EX_CLIENTEDGE, L"EDIT", L"0",
         WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_OVERLAPPED | ES_NUMBER,
-        40, 184, 200, 24, mainWnd, NULL, hInst, NULL
+        52, 184, 188, 24, mainWnd, NULL, hInst, NULL
     );
-
     speedUnitsWnd = CreateWindowW(
         L"COMBOBOX", nullptr,
         CBS_DROPDOWNLIST | WS_CHILD | WS_VISIBLE | WS_OVERLAPPED | WS_TABSTOP,
-        240, 184, 100, 200, mainWnd, nullptr, hInst, nullptr
+        240, 184, 112, 200, mainWnd, nullptr, hInst, nullptr
     );
     SendMessage(speedUnitsWnd, CB_ADDSTRING, 0, LPARAM(unitStrings[MPH]));
     SendMessage(speedUnitsWnd, CB_ADDSTRING, 0, LPARAM(unitStrings[KPH]));
 
-    CreateWindowW(
-        L"STATIC", L"Manual fan control:",
-        WS_CHILD | WS_VISIBLE,
-        30, 234, 300, 20, mainWnd, NULL, hInst, NULL
-    );
-
-    manualWnd = CreateWindowEx(
-        0, TRACKBAR_CLASS, L"Manual fan control:",
-        WS_CHILD | WS_VISIBLE | TBS_TOOLTIPS | TBS_TRANSPARENTBKGND,
-        40, 260, 240, 30,
-        mainWnd, NULL, hInst, NULL
-    );
-    SendMessage(manualWnd, TBM_SETPOS, TRUE, (int)manualSpeed);
-
-    HWND buddyLeft = CreateWindowEx(
-        0, L"STATIC", L"0",
-        SS_LEFT | WS_CHILD | WS_VISIBLE,
-        0, 0, 46, 20, mainWnd, NULL, hInst, NULL
-    );
-    SendMessage(manualWnd, TBM_SETBUDDY, (WPARAM)TRUE, (LPARAM)buddyLeft);
-
-    HWND buddyRight = CreateWindowEx(
-        0, L"STATIC", L"100",
-        SS_RIGHT | WS_CHILD | WS_VISIBLE,
-        0, 0, 58, 20, mainWnd, NULL, hInst, NULL
-    );
-    SendMessage(manualWnd, TBM_SETBUDDY, (WPARAM)FALSE, (LPARAM)buddyRight);
+    manualWnd = slider(mainWnd, L"Manual fan speed:", 40, 234, L"0", L"100");
 
     ShowWindow(mainWnd, SW_SHOWNORMAL);
     UpdateWindow(mainWnd);

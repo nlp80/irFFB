@@ -320,7 +320,7 @@ void Settings::readSettingsForCar(char *car) {
                 line.c_str(), INI_SCAN_FORMAT,
                 carName, sizeof(carName),
                 &type, &min, &max, &bumps, &load, &extraLong, &use360, &yaw
-            ) >= 8
+            ) < 8
         )
             continue;
         if (strcmp(carName, car) == 0)
@@ -381,8 +381,8 @@ void Settings::writeSettingsForCar(char *car) {
                 line.c_str(), INI_SCAN_FORMAT,
                 carName, sizeof(carName),
                 &type, &min, &max, &bumps, &load, &extraLong, &use360, &yaw
-                ) >= 8
-            ) {
+            ) < 8
+        ) {
             strcpy_s(buf, line.c_str());
             writeWithNewline(tmpFile, buf);
             continue;

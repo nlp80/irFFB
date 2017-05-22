@@ -34,8 +34,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define DIRECT_INTERP_SAMPLES 6
 #define KEY_PATH L"Software\\irFFB\\Settings"
 #define INI_PATH L"\\irFFB.ini"
-#define INI_SCAN_FORMAT  "%[^:]:%d:%d:%d:%d:%d:%d:%d\r"
-#define INI_PRINT_FORMAT "%s:%d:%d:%d:%d:%d:%d:%d\r"
+#define INI_SCAN_FORMAT  "%[^:]:%d:%d:%d:%d:%d:%d:%d:%d\r"
+#define INI_PRINT_FORMAT "%s:%d:%d:%d:%d:%d:%d:%d:%d\r"
 #define MAX_CAR_NAME 32
 
 enum ffbType {
@@ -52,6 +52,10 @@ ATOM MyRegisterClass(HINSTANCE);
 BOOL InitInstance(HINSTANCE, int);
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
 INT_PTR CALLBACK About(HWND, UINT, WPARAM, LPARAM);
+
+HWND combo(HWND, wchar_t *, int, int); 
+HWND slider(HWND, wchar_t *, int, int, wchar_t *, wchar_t *);
+HWND checkbox(HWND, wchar_t *, int, int); 
 
 bool initVJD();
 void text(wchar_t *, ...);
@@ -70,3 +74,33 @@ void releaseAll();
 
 BOOL CALLBACK EnumFFDevicesCallback(LPCDIDEVICEINSTANCE, VOID *);
 void CALLBACK vjFFBCallback(PVOID, PVOID);
+
+// The compiler seems to like branches
+inline float minf(float a, float b) {
+
+    __m128 ma = _mm_set_ss(a);
+    __m128 mb = _mm_set_ss(b);
+    return _mm_cvtss_f32(_mm_min_ss(ma, mb));
+
+}
+
+inline float maxf(float a, float b) {
+
+    __m128 ma = _mm_set_ss(a);
+    __m128 mb = _mm_set_ss(b);
+    return _mm_cvtss_f32(_mm_max_ss(ma, mb));
+
+}
+
+inline float csignf(float a, float b) {
+
+    float mask = -0.0f;
+
+    __m128 ma = _mm_set_ss(a);
+    __m128 mb = _mm_set_ss(b);
+    __m128 mm = _mm_set_ss(mask);
+    ma = _mm_andnot_ps(ma, mm);
+    mb = _mm_and_ps(mb, mm);
+    return _mm_cvtss_f32(_mm_or_ps(ma, mb));
+
+}

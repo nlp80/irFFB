@@ -18,6 +18,8 @@ class Settings {
         HWND getBumpsWnd();
         void setLoadWnd(HWND);
         HWND getLoadWnd();
+        void setYawWnd(HWND);
+        HWND getYawWnd();
         void setExtraLongWnd(HWND);
         HWND getExtraLongWnd();
         void setUse360Wnd(HWND);
@@ -38,6 +40,8 @@ class Settings {
         float getBumpsFactor();
         void setLoadFactor(int);
         float getLoadFactor();
+        void setYawFactor(int);
+        float getYawFactor();
         void setExtraLongLoad(bool);
         bool getExtraLongLoad();
         void setUse360ForDirect(bool);
@@ -54,10 +58,10 @@ class Settings {
         void writeSettingsForCar(char *);
 
     private:
-        HWND devWnd, ffbWnd, minWnd, maxWnd, bumpsWnd, loadWnd;
+        HWND devWnd, ffbWnd, minWnd, maxWnd, bumpsWnd, loadWnd, yawWnd;
         HWND extraLongWnd, use360Wnd, carSpecificWnd;
         int ffbType, ffdeviceIdx, minForce, maxForce;
-        float scaleFactor, bumpsFactor, loadFactor;
+        float scaleFactor, bumpsFactor, loadFactor, yawFactor;
         bool extraLongLoad, use360ForDirect, useCarSpecific;
         GUID devGuid = GUID_NULL, ffdevices[MAX_FFB_DEVICES];
 

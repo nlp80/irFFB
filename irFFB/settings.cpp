@@ -3,7 +3,11 @@
 #include <iostream>
 #include <string>
     
-Settings::Settings() {}
+Settings::Settings() {
+    memset(ffdevices, 0, MAX_FFB_DEVICES * sizeof(GUID));
+    ffdeviceIdx = 0;
+    devGuid = GUID_NULL;
+}
 
 void Settings::setDevWnd(HWND wnd) { devWnd = wnd; }
 HWND Settings::getDevWnd() { return devWnd; }
@@ -32,6 +36,9 @@ HWND Settings::getBumpsWnd() { return bumpsWnd; }
 
 void Settings::setLoadWnd(HWND wnd) { loadWnd = wnd; }
 HWND Settings::getLoadWnd() { return loadWnd; }
+
+void Settings::setYawWnd(HWND wnd) { yawWnd = wnd; }
+HWND Settings::getYawWnd() { return yawWnd; }
         
 void Settings::setExtraLongWnd(HWND wnd) { extraLongWnd = wnd; }
 HWND Settings::getExtraLongWnd() { return extraLongWnd; }
@@ -46,7 +53,7 @@ void Settings::addFfbDevice(GUID dev, const wchar_t *name) {
     if (ffdeviceIdx == MAX_FFB_DEVICES)
         return;
     ffdevices[ffdeviceIdx++] = dev;
-    SendMessage((HWND)devWnd, CB_ADDSTRING, 0, LPARAM(name));
+    SendMessage(devWnd, CB_ADDSTRING, 0, LPARAM(name));
     if (devGuid == dev)
         setFfbDevice(ffdeviceIdx - 1);
 
@@ -65,12 +72,12 @@ GUID Settings::getFfbDevice() {
 }
 
 void Settings::setFfbType(int type) {
-    if (ffbType >= FFBTYPE_UNKNOWN)
+    if (type >= FFBTYPE_UNKNOWN)
         return;
     ffbType = type;
     SendMessage(ffbWnd, CB_SETCURSEL, ffbType, 0);
-    if (ffbType != FFBTYPE_DIRECT_FILTER)
-        EnableWindow(use360Wnd, false);
+    EnableWindow(use360Wnd, ffbType == FFBTYPE_DIRECT_FILTER);
+        
 }
 int Settings::getFfbType() { return ffbType; }
 
@@ -115,6 +122,15 @@ void Settings::setLoadFactor(int factor) {
     SendMessage(loadWnd, TBM_SETPOSNOTIFY, 0, factor);
 }
 float Settings::getLoadFactor() { return loadFactor; }
+
+void Settings::setYawFactor(int factor) {
+    if (factor < 0 || factor > 100)
+        return;
+    yawFactor = (float)factor;
+    SendMessage(yawWnd, TBM_SETPOS, TRUE, factor);
+    SendMessage(yawWnd, TBM_SETPOSNOTIFY, 0, factor);
+}
+float Settings::getYawFactor() { return yawFactor; }
 
 void Settings::setExtraLongLoad(bool set) {
     extraLongLoad = set;
@@ -166,6 +182,7 @@ void Settings::writeCarSpecificSetting() {
 
     HKEY regKey;
     DWORD sz = sizeof(DWORD);
+    DWORD specific = useCarSpecific;  
 
     RegCreateKeyEx(
         HKEY_CURRENT_USER, KEY_PATH, 0, nullptr,
@@ -173,7 +190,7 @@ void Settings::writeCarSpecificSetting() {
     );
 
     if (!RegOpenKeyEx(HKEY_CURRENT_USER, KEY_PATH, 0, KEY_ALL_ACCESS, &regKey))
-        RegSetValueEx(regKey, L"useCarSpecific", 0, REG_DWORD, (BYTE *)&useCarSpecific, sz);
+        RegSetValueEx(regKey, L"useCarSpecific", 0, REG_DWORD, (BYTE *)&specific, sz);
 
 }
 
@@ -210,6 +227,10 @@ void Settings::readRegSettings(bool readCarSpecific, char *car) {
             setLoadFactor(0);
         else
             setLoadFactor(val);
+        if (RegGetValue(regKey, nullptr, L"yawFactor", RRF_RT_REG_DWORD, nullptr, &val, &sz))
+            setYawFactor(0);
+        else
+            setYawFactor(val);
         if (RegGetValue(regKey, nullptr, L"use360ForDirect", RRF_RT_REG_DWORD, nullptr, &val, &sz))
             setUse360ForDirect(true);
         else
@@ -232,6 +253,7 @@ void Settings::readRegSettings(bool readCarSpecific, char *car) {
         setMaxForce(45);
         setBumpsFactor(0);
         setLoadFactor(0);
+        setYawFactor(0);
         setUse360ForDirect(true);
         setExtraLongLoad(false);
         setUseCarSpecific(false, car);
@@ -249,6 +271,7 @@ void Settings::writeRegSettings() {
     DWORD min = getMinForceSetting();
     DWORD use360 = getUse360ForDirect();
     DWORD extraLong = getExtraLongLoad();
+    DWORD yaw = (DWORD)yawFactor;
 
     RegCreateKeyEx(
         HKEY_CURRENT_USER, KEY_PATH, 0, nullptr,
@@ -264,6 +287,7 @@ void Settings::writeRegSettings() {
         RegSetValueEx(regKey, L"ffb", 0, REG_DWORD, (BYTE *)&ffbType, sz);
         RegSetValueEx(regKey, L"bumpsFactor", 0, REG_DWORD, (BYTE *)&bumps, sz);
         RegSetValueEx(regKey, L"loadFactor", 0, REG_DWORD, (BYTE *)&load, sz);
+        RegSetValueEx(regKey, L"yawFactor", 0, REG_DWORD, (BYTE *)&yaw, sz);
         RegSetValueEx(regKey, L"maxForce", 0, REG_DWORD, (BYTE *)&maxForce, sz);
         RegSetValueEx(regKey, L"minForce", 0, REG_DWORD, (BYTE *)&min, sz);
         RegSetValueEx(regKey, L"use360ForDirect", 0, REG_DWORD, (BYTE *)&use360, sz);
@@ -286,7 +310,7 @@ void Settings::readSettingsForCar(char *car) {
     std::string line;
 
     char carName[MAX_CAR_NAME];
-    int type, min, max, bumps, load, extraLong, use360;
+    int type = 2, min = 0, max = 45, bumps = 0, load = 0, yaw = 0, extraLong = 0, use360 = 1;
 
     memset(carName, 0, sizeof(carName));
 
@@ -295,8 +319,8 @@ void Settings::readSettingsForCar(char *car) {
             sscanf_s(
                 line.c_str(), INI_SCAN_FORMAT,
                 carName, sizeof(carName),
-                &type, &min, &max, &bumps, &load, &extraLong, &use360
-            ) != 8
+                &type, &min, &max, &bumps, &load, &extraLong, &use360, &yaw
+            ) >= 8
         )
             continue;
         if (strcmp(carName, car) == 0)
@@ -313,6 +337,7 @@ void Settings::readSettingsForCar(char *car) {
     setMaxForce(max);
     setBumpsFactor(bumps);
     setLoadFactor(load);
+    setYawFactor(yaw);
     setExtraLongLoad(extraLong > 0);
     setUse360ForDirect(use360 > 0);
 
@@ -340,7 +365,7 @@ void Settings::writeSettingsForCar(char *car) {
     std::string line;
 
     char carName[MAX_CAR_NAME], buf[256];
-    int type, min, max, bumps, load, extraLong, use360;
+    int type = 2, min = 0, max = 45, bumps = 0, load = 0, yaw = 0, extraLong = 0, use360 = 1;
     bool written = false, iniPresent = iniFile.good();
 
     text(L"Writing settings for car %s", car);
@@ -355,8 +380,8 @@ void Settings::writeSettingsForCar(char *car) {
             sscanf_s(
                 line.c_str(), INI_SCAN_FORMAT,
                 carName, sizeof(carName),
-                &type, &min, &max, &bumps, &load, &extraLong, &use360
-                ) != 8
+                &type, &min, &max, &bumps, &load, &extraLong, &use360, &yaw
+                ) >= 8
             ) {
             strcpy_s(buf, line.c_str());
             writeWithNewline(tmpFile, buf);
@@ -370,7 +395,7 @@ void Settings::writeSettingsForCar(char *car) {
         sprintf_s(
             buf, INI_PRINT_FORMAT,
             car, ffbType, getMinForceSetting(), maxForce, getBumpsSetting(),
-            getLoadSetting(), extraLongLoad, use360ForDirect
+            getLoadSetting(), extraLongLoad, use360ForDirect, (int)yawFactor
         );
         writeWithNewline(tmpFile, buf);
         written = true;
@@ -380,7 +405,7 @@ void Settings::writeSettingsForCar(char *car) {
         goto MOVE;
 
     if (!iniPresent) {
-        sprintf_s(buf, "car:ffbType:minForce:maxForce:bumps:load:incrLongEff:effUse360\r\n\r\n");
+        sprintf_s(buf, "car:ffbType:minForce:maxForce:bumps:load:incrLongEff:effUse360:sop\r\n\r\n");
         tmpFile.write(buf, strlen(buf));
         sprintf_s(buf, "ffbType     | 0 = 360, 1 = 360I, 2 = 60DF\r\n");
         tmpFile.write(buf, strlen(buf));
@@ -394,14 +419,16 @@ void Settings::writeSettingsForCar(char *car) {
         tmpFile.write(buf, strlen(buf));
         sprintf_s(buf, "incrLongEff | off = 0, on = 1\r\n");
         tmpFile.write(buf, strlen(buf));
-        sprintf_s(buf, "effUse360   | off = 0, on = 1\r\n\r\n");
+        sprintf_s(buf, "effUse360   | off = 0, on = 1\r\n");
+        tmpFile.write(buf, strlen(buf));
+        sprintf_s(buf, "sop         | min = 0, max = 100\r\n\r\n");
         tmpFile.write(buf, strlen(buf));
     }
 
     sprintf_s(
         buf, INI_PRINT_FORMAT,
         car, ffbType, getMinForceSetting(), maxForce, getBumpsSetting(),
-        getLoadSetting(), extraLongLoad, use360ForDirect
+        getLoadSetting(), extraLongLoad, use360ForDirect, (int)yawFactor
     );
     writeWithNewline(tmpFile, buf);
 

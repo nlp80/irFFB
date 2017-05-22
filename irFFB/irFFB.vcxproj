@@ -97,7 +97,7 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>vjoyinterface.lib;dxguid.lib;dinput8.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>vjoyinterface.lib;dxguid.lib;dinput8.lib;shlwapi.lib;wbemuuid.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -126,13 +126,14 @@
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <OmitFramePointers>true</OmitFramePointers>
       <BufferSecurityCheck>false</BufferSecurityCheck>
+      <AssemblerOutput>All</AssemblerOutput>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>No</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>vjoyinterface.lib;dxguid.lib;dinput8.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>vjoyinterface.lib;dxguid.lib;dinput8.lib;shlwapi.lib;wbemuuid.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <LinkErrorReporting>NoErrorReport</LinkErrorReporting>
     </Link>
   </ItemDefinitionGroup>
@@ -154,13 +155,18 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="fan.cpp" />
     <ClCompile Include="irFFB.cpp" />
     <ClCompile Include="irsdk_utils.cpp" />
+    <ClCompile Include="jetseat.cpp" />
     <ClCompile Include="settings.cpp" />
     <ClCompile Include="stdafx.cpp" />
     <ClCompile Include="yaml_parser.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="fan.h" />
+    <ClInclude Include="IUberwoorf.h" />
+    <ClInclude Include="jetseat.h" />
     <ClInclude Include="Settings.h" />
     <ClInclude Include="irFFB.h" />
     <ClInclude Include="irsdk_defines.h" />

@@ -186,8 +186,6 @@ DWORD WINAPI directFFBThread(LPVOID lParam) {
         if (!use360)
             s += scaleTorque(suspForce);
 
-        
-
         for (int i = 0; i < DIRECT_INTERP_SAMPLES; i++) {
 
             prod[i] = s * firc[i];

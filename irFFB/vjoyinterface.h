@@ -4,16 +4,9 @@
 // that uses this DLL. This way any other project whose source files include this file see 
 // VJOYINTERFACE_API functions as being imported from a DLL, whereas this DLL sees symbols
 // defined with this macro as being exported.
-#ifdef VJOYINTERFACE_EXPORTS
-#define VJOYINTERFACE_API __declspec(dllexport)
-#else
-#define VJOYINTERFACE_API __declspec(dllimport)
-#endif
+#pragma once
 
-#ifdef STATIC
-#undef VJOYINTERFACE_API
-#define VJOYINTERFACE_API
-#endif
+#define VJOYINTERFACE_API 
 
 ///////////////////////////// vJoy device (collection) status ////////////////////////////////////////////
 #ifndef VJDSTAT
@@ -50,15 +43,12 @@ enum VjdStat  /* Declares an enumeration data type */
 #define REG_INIT		L"Init"
 #define BTN_INIT		L"BTNS"
 
-/* Environment Variables */
-#define INTERFACE_LOG_LEVEL "VJOYINTERFACELOGLEVEL"
-#define INTERFACE_LOG_FILE  "VJOYINTERFACELOGFILE"
-#define INTERFACE_DEF_LOG_FILE	"vJoyInterface.log"
-
 /* Compatibility definitions */
 #define FFB_EFF_CONST 	FFB_EFF_REPORT
 #define PFFB_EFF_CONST 	PFFB_EFF_REPORT
 #define Ffb_h_Eff_Const Ffb_h_Eff_Report
+
+#define FFB_DATA_MAX_SIZE 64
 
 // Device Axis/POVs/Buttons
 struct DEVCTRLS {
@@ -86,12 +76,12 @@ struct DEVCTRLS {
 };
 
 struct DeviceStat {
-	HANDLE h;								// Handle to the PDO interface that represents the virtual device
-	VjdStat stat;							// Status of the device
-	JOYSTICK_POSITION_V2 position;			// Current Position of the device
-	HDEVNOTIFY hDeviceNotifyHandle;			// Device Notification Handle
-	DEVCTRLS	DeviceControls;				// Structure Holding the data about the device's controls
-	PVOID		 pPreParsedData;	// structure contains a top-level collection's preparsed data.
+	HANDLE      h;				        // Handle to the PDO interface that represents the virtual device
+	VjdStat     stat;				    // Status of the device
+	JOYSTICK_POSITION_V2 position;		// Current Position of the device
+	HDEVNOTIFY  hDeviceNotifyHandle;	// Device Notification Handle
+	DEVCTRLS	DeviceControls;			// Structure Holding the data about the device's controls
+	PVOID		pPreParsedData;	        // structure contains a top-level collection's preparsed data.
 };
 
 struct DEV_INFO {
@@ -102,11 +92,6 @@ struct DEV_INFO {
 	BYTE	DriverFFB;		// Does this driver support FFB (False)
 	BYTE	DeviceFFB;		// Does this device support FFB (False)
 } ;
-
-
-
-typedef void (CALLBACK *RemovalCB)(BOOL, BOOL, PVOID);
-
 
 enum FFBEType // FFB Effect Type
 {
@@ -182,11 +167,13 @@ enum FFB_EFFECTS {
 	Custom		= 0x0800,
 };
 
+#pragma pack(push,1)
 typedef struct _FFB_DATA {
 	ULONG	size;
 	ULONG	cmd;
-	UCHAR	*data;
+	UCHAR	data[FFB_DATA_MAX_SIZE];
 } FFB_DATA, * PFFB_DATA;
+#pragma pack(pop)
 
 typedef struct _FFB_EFF_CONSTANT { 
 	BYTE EffectBlockIndex; 
@@ -251,17 +238,10 @@ typedef struct _FFB_EFF_ENVLP {
 	DWORD 		FadeTime;	   // Time of the fading: 0 - 4294967295
 } FFB_EFF_ENVLP, *PFFB_EFF_ENVLP;
 
-#define FFB_DATA_READY	 WM_USER+31
-
-typedef void (CALLBACK *FfbGenCB)(PVOID, PVOID);
 #endif
 
+extern "C" {
 
-#ifndef STATIC
-	extern "C" {
-#else
-namespace vJoyNS {
-#endif
 	///////////////////////////// vJoy device (collection) Control interface /////////////////////////////////
 	/*
 		These functions allow writing feeders and other applications that interface with vJoy
@@ -278,11 +258,7 @@ namespace vJoyNS {
 	/////	General driver data
 	VJOYINTERFACE_API SHORT __cdecl GetvJoyVersion(void);
 	VJOYINTERFACE_API BOOL	__cdecl vJoyEnabled(void);
-	VJOYINTERFACE_API PVOID	__cdecl	GetvJoyProductString(void);
-	VJOYINTERFACE_API PVOID	__cdecl	GetvJoyManufacturerString(void);
-	VJOYINTERFACE_API PVOID	__cdecl	GetvJoySerialNumberString(void);
 	VJOYINTERFACE_API BOOL	__cdecl	DriverMatch(WORD * DllVer, WORD * DrvVer);
-	VJOYINTERFACE_API VOID	__cdecl	RegisterRemovalCB(RemovalCB cb, PVOID data);
 	VJOYINTERFACE_API BOOL	__cdecl	vJoyFfbCap(BOOL * Supported);	// Is this version of vJoy capable of FFB?
 	VJOYINTERFACE_API BOOL	__cdecl	GetvJoyMaxDevices(int * n);	// What is the maximum possible number of vJoy devices
 	VJOYINTERFACE_API BOOL	__cdecl	GetNumberExistingVJD(int * n);	// What is the number of vJoy devices currently enabled
@@ -298,69 +274,21 @@ namespace vJoyNS {
 	VJOYINTERFACE_API enum VjdStat	__cdecl	GetVJDStatus(UINT rID);			// Get the status of the specified vJoy Device.
 	// Added in 2.1.6
 	VJOYINTERFACE_API BOOL	__cdecl	isVJDExists(UINT rID);					// TRUE if the specified vJoy Device exists																			
-	// Added in 2.1.8
-	VJOYINTERFACE_API int	__cdecl	GetOwnerPid(UINT rID);					// Reurn owner's Process ID if the specified vJoy Device exists
-
 
 	/////	Write access to vJoy Device - Basic
-	VJOYINTERFACE_API BOOL		__cdecl	AcquireVJD(UINT rID);				// Acquire the specified vJoy Device.
-	VJOYINTERFACE_API VOID		__cdecl	RelinquishVJD(UINT rID);			// Relinquish the specified vJoy Device.
-	VJOYINTERFACE_API BOOL		__cdecl	UpdateVJD(UINT rID, PVOID pData);	// Update the position data of the specified vJoy Device.
-
-	/////	Write access to vJoy Device - Modifyiers
-	// This group of functions modify the current value of the position data
-	// They replace the need to create a structure of position data then call UpdateVJD
+	VJOYINTERFACE_API BOOL		__cdecl	AcquireVJD(UINT rID, HANDLE fEvent, FFB_DATA *pkt); // Acquire the specified vJoy Device.
+	VJOYINTERFACE_API VOID		__cdecl	RelinquishVJD(UINT rID);			 // Relinquish the specified vJoy Device.
+	VJOYINTERFACE_API BOOL		__cdecl	UpdateVJD(UINT rID, PVOID pData);	 // Update the position data of the specified vJoy Device.
 
 	//// Reset functions
 	VJOYINTERFACE_API BOOL		__cdecl	ResetVJD(UINT rID);			// Reset all controls to predefined values in the specified VDJ
-	VJOYINTERFACE_API VOID		__cdecl	ResetAll(void);				// Reset all controls to predefined values in all VDJ
-	VJOYINTERFACE_API BOOL		__cdecl	ResetButtons(UINT rID);		// Reset all buttons (To 0) in the specified VDJ
-	VJOYINTERFACE_API BOOL		__cdecl	ResetPovs(UINT rID);		// Reset all POV Switches (To -1) in the specified VDJ
-
-	// Write data
-	VJOYINTERFACE_API BOOL		__cdecl	SetAxis(LONG Value, UINT rID, UINT Axis);		// Write Value to a given axis defined in the specified VDJ 
-	VJOYINTERFACE_API BOOL		__cdecl	SetBtn(BOOL Value, UINT rID, UCHAR nBtn);		// Write Value to a given button defined in the specified VDJ 
-	VJOYINTERFACE_API BOOL		__cdecl	SetDiscPov(int Value, UINT rID, UCHAR nPov);	// Write Value to a given descrete POV defined in the specified VDJ 
-	VJOYINTERFACE_API BOOL		__cdecl	SetContPov(DWORD Value, UINT rID, UCHAR nPov);	// Write Value to a given continuous POV defined in the specified VDJ 
-
 
 #pragma region FFB Function prototypes
-// Force Feedback (FFB) functions
-	VJOYINTERFACE_API FFBEType	__cdecl	FfbGetEffect();	// Returns effect serial number if active, 0 if inactive
-	VJOYINTERFACE_API VOID		__cdecl	FfbRegisterGenCB(FfbGenCB cb, PVOID data);
-	__declspec(deprecated("** FfbStart function was deprecated - you can remove it from your code **")) \
-		VJOYINTERFACE_API BOOL		__cdecl	FfbStart(UINT rID);				  // Start the FFB queues of the specified vJoy Device.
-	__declspec(deprecated("** FfbStop function was deprecated - you can remove it from your code **")) \
-		VJOYINTERFACE_API VOID		__cdecl	FfbStop(UINT rID);				  // Stop the FFB queues of the specified vJoy Device.
-
 		// Added in 2.1.6
 	VJOYINTERFACE_API BOOL		__cdecl	IsDeviceFfb(UINT rID);
 	VJOYINTERFACE_API BOOL		__cdecl	IsDeviceFfbEffect(UINT rID, UINT Effect);
-
-	//  Force Feedback (FFB) helper functions
-	VJOYINTERFACE_API DWORD 	__cdecl	Ffb_h_DeviceID(const FFB_DATA * Packet, int *DeviceID);
-	VJOYINTERFACE_API DWORD 	__cdecl Ffb_h_Type(const FFB_DATA * Packet, FFBPType *Type);
-	VJOYINTERFACE_API DWORD 	__cdecl Ffb_h_Packet(const FFB_DATA * Packet, WORD *Type, int *DataSize, BYTE *Data[]);
-	VJOYINTERFACE_API DWORD 	__cdecl Ffb_h_EBI(const FFB_DATA * Packet, int *Index);
-	VJOYINTERFACE_API DWORD 	__cdecl Ffb_h_Eff_Report(const FFB_DATA * Packet, FFB_EFF_REPORT*  Effect);
-	__declspec(deprecated("** Ffb_h_Eff_Const function was deprecated - Use function Ffb_h_Eff_Report **")) \
-	VJOYINTERFACE_API DWORD 	__cdecl Ffb_h_Eff_Const(const FFB_DATA * Packet, FFB_EFF_CONST*  Effect);
-	VJOYINTERFACE_API DWORD		__cdecl Ffb_h_Eff_Ramp(const FFB_DATA * Packet, FFB_EFF_RAMP*  RampEffect);
-	VJOYINTERFACE_API DWORD 	__cdecl Ffb_h_EffOp(const FFB_DATA * Packet, FFB_EFF_OP*  Operation);
-	VJOYINTERFACE_API DWORD 	__cdecl Ffb_h_DevCtrl(const FFB_DATA * Packet, FFB_CTRL *  Control);
-	VJOYINTERFACE_API DWORD 	__cdecl Ffb_h_Eff_Period(const FFB_DATA * Packet, FFB_EFF_PERIOD*  Effect);
-	VJOYINTERFACE_API DWORD 	__cdecl Ffb_h_Eff_Cond(const FFB_DATA * Packet, FFB_EFF_COND*  Condition);
-	VJOYINTERFACE_API DWORD 	__cdecl Ffb_h_DevGain(const FFB_DATA * Packet, BYTE * Gain);
-	VJOYINTERFACE_API DWORD		__cdecl Ffb_h_Eff_Envlp(const FFB_DATA * Packet, FFB_EFF_ENVLP*  Envelope);
-	VJOYINTERFACE_API DWORD		__cdecl Ffb_h_EffNew(const FFB_DATA * Packet, FFBEType * Effect);
-
-	// Added in 2.1.6
-	VJOYINTERFACE_API DWORD		__cdecl Ffb_h_Eff_Constant(const FFB_DATA * Packet, FFB_EFF_CONSTANT *  ConstantEffect);
 #pragma endregion
 
 #pragma warning( pop )
-#ifndef STATIC
-	} // extern "C"
-#else
+
 } // Namespace vJoyNS
-#endif

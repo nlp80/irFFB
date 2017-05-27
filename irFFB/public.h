@@ -33,16 +33,17 @@ Revision History:
 #ifndef _PUBLIC_H
 #define _PUBLIC_H
 
-// Compilation directives
-#define PPJOY_MODE
-#undef PPJOY_MODE	// Comment-out for compatibility mode
-
-#ifdef PPJOY_MODE
-#include "PPJIoctl.h"
-#endif
-
 #include <INITGUID.H>	// Definitions for controlling GUID initialization
+#define METHOD_BUFFERED             0
+#define METHOD_OUT_DIRECT           2
+#define FILE_DEVICE_UNKNOWN         0x00000022
+#define FILE_ANY_ACCESS             0
+#define FILE_READ_ACCESS            1
+#define FILE_WRITE_ACCESS           2
 
+#define CTL_CODE(DeviceType, Function, Method, Access) (\
+    ((DeviceType) << 16) | ((Access) << 14) | ((Function) << 2) | (Method) \
+)
 // Sideband comunication with vJoy Device
 //{781EF630-72B2-11d2-B852-00C04FAD5101}
 DEFINE_GUID(GUID_DEVINTERFACE_VJOY, 0x781EF630, 0x72B2, 0x11d2, 0xB8, 0x52, 0x00, 0xC0, 0x4F, 0xAD, 0x51, 0x01);
@@ -50,11 +51,7 @@ DEFINE_GUID(GUID_DEVINTERFACE_VJOY, 0x781EF630, 0x72B2, 0x11d2, 0xB8, 0x52, 0x00
 //
 // Usage example:
 //		CreateFile(TEXT("\\\\.\\vJoy"), GENERIC_READ, 0, NULL, OPEN_EXISTING, 0, NULL);
-#ifdef PPJOY_MODE
-#define DEVICENAME_STRING			"PPJoyIOCTL1"
-#else
 #define DEVICENAME_STRING			"vJoy"
-#endif
 #define NTDEVICE_NAME_STRING		"\\Device\\"DEVICENAME_STRING
 #define SYMBOLIC_NAME_STRING		"\\DosDevices\\"DEVICENAME_STRING
 #define	DOS_FILE_NAME				"\\\\.\\"DEVICENAME_STRING

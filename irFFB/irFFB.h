@@ -21,6 +21,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "stdafx.h"
 #include "irsdk_defines.h"
 
+#include <xmmintrin.h>
+
 #define MAX_FFB_DEVICES 16
 #define DI_MAX 10000
 #define MINFORCE_MULTIPLIER 100
@@ -73,7 +75,6 @@ void initAll();
 void releaseAll();
 
 BOOL CALLBACK EnumFFDevicesCallback(LPCDIDEVICEINSTANCE, VOID *);
-void CALLBACK vjFFBCallback(PVOID, PVOID);
 
 // The compiler seems to like branches
 inline float minf(float a, float b) {

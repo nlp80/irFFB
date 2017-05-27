@@ -77,6 +77,7 @@ HWND mainWnd, textWnd, statusWnd;
 LARGE_INTEGER freq;
 
 int vjDev = 1;
+FFB_DATA ffbPacket;
 
 float *floatvarptr(const char *data, const char *name) {
     int idx = irsdk_varNameToIndex(name);
@@ -109,7 +110,6 @@ DWORD WINAPI readWheelThread(LPVOID lParam) {
 
     HRESULT res;
     JOYSTICK_POSITION vjData;
-
     ResetVJD(vjDev);
 
     while (true) {
@@ -166,6 +166,8 @@ DWORD WINAPI readWheelThread(LPVOID lParam) {
 DWORD WINAPI directFFBThread(LPVOID lParam) {
 
     UNREFERENCED_PARAMETER(lParam);
+    UCHAR type;
+    int16_t mag;
 
     float s;
     float prod[] = { 0, 0, 0, 0, 0, 0 };
@@ -179,14 +181,41 @@ DWORD WINAPI directFFBThread(LPVOID lParam) {
         // Signalled when force has been updated
         WaitForSingleObject(ffbEvent, INFINITE);
 
+        if (settings.getFfbType() != FFBTYPE_DIRECT_FILTER)
+            continue;
+        
+        if (((ffbPacket.data[0] & 0xF0) >> 4) != vjDev)
+            continue;
+        
+        type = ffbPacket.data[0] & 0x0F;
+
+        if (type == PT_CONSTREP)
+            mag = (ffbPacket.data[3] << 8) + ffbPacket.data[2];
+        else if (type == PT_PRIDREP)
+            mag = (ffbPacket.data[5] << 8) + ffbPacket.data[4];
+        else
+            continue;
+
         QueryPerformanceCounter(&start);
+
+        // sign extend
+        force = mag;
 
         s = (float)force;
 
         if (!use360)
             s += scaleTorque(suspForce);
 
-        for (int i = 0; i < DIRECT_INTERP_SAMPLES; i++) {
+        prod[0] = s * firc[0];
+        output[0] = prod[0] + prod[1] + prod[2] + prod[3] + prod[4] + prod[5];
+
+        if (use360)
+            output[0] += scaleTorque(suspForceST[0]);
+
+        output[0] += scaleTorque(yawForce[0]);
+        setFFB((int)output[0]);
+
+        for (int i = 1; i < DIRECT_INTERP_SAMPLES; i++) {
 
             prod[i] = s * firc[i];
             output[i] = prod[0] + prod[1] + prod[2] + prod[3] + prod[4] + prod[5];
@@ -196,8 +225,8 @@ DWORD WINAPI directFFBThread(LPVOID lParam) {
 
             output[i] += scaleTorque(yawForce[i]);
 
-            setFFB((int)output[i]);
             sleepSpinUntil(&start, 2000, 2760 * i);
+            setFFB((int)output[i]);
 
         }
 
@@ -363,8 +392,12 @@ int APIENTRY wWinMain(
 
     initVJD();
     SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS);
-    CreateThread(NULL, 0, readWheelThread, NULL, 0, NULL);
-    CreateThread(NULL, 0, directFFBThread, NULL, 0, NULL);
+    SetThreadPriority(
+        CreateThread(NULL, 0, readWheelThread, NULL, 0, NULL), THREAD_PRIORITY_HIGHEST
+    );
+    SetThreadPriority(
+        CreateThread(NULL, 0, directFFBThread, NULL, 0, NULL), THREAD_PRIORITY_HIGHEST
+    );
 
     while (TRUE) {
 
@@ -1209,7 +1242,6 @@ void setOnTrackStatus(bool onTrack) {
 
 }
 
-
 BOOL CALLBACK EnumFFDevicesCallback(LPCDIDEVICEINSTANCE diDevInst, VOID *wnd) {
 
     UNREFERENCED_PARAMETER(wnd);
@@ -1417,33 +1449,6 @@ inline void setFFB(int mag) {
 
 }
 
-void CALLBACK vjFFBCallback(PVOID ffbPacket, PVOID data) {
-
-    UNREFERENCED_PARAMETER(data);
-
-    FFBPType type;
-    FFB_EFF_CONSTANT constEffect;
-    int16_t mag;
-
-    if (settings.getFfbType() != FFBTYPE_DIRECT_FILTER)
-        return;
-
-    // Only interested in constant force reports
-    if (Ffb_h_Type((FFB_DATA *)ffbPacket, &type) || type != PT_CONSTREP)
-        return;
-
-    // Parse the report
-    if (Ffb_h_Eff_Constant((FFB_DATA *)ffbPacket, &constEffect))
-        return;
-
-    // low word is magnitude
-    mag = constEffect.Magnitude & 0xffff;
-    // sign extend
-    force = mag;
-    SetEvent(ffbEvent);
-
-}
-
 bool initVJD() {
 
     WORD verDll, verDrv;
@@ -1507,7 +1512,7 @@ NEXT:
         vjdStatus = GetVJDStatus(vjDev);
     }
     if (vjdStatus == VJD_STAT_FREE) {
-        if (!AcquireVJD(vjDev)) {
+        if (!AcquireVJD(vjDev, ffbEvent, &ffbPacket)) {
             text(L"Failed to acquire vJoy device %d!", vjDev);
             return false;
         }
@@ -1522,7 +1527,6 @@ NEXT:
     vjPov += GetVJDDiscPovNumber(vjDev);
 
     text(L"Acquired vJoy device %d", vjDev);
-    FfbRegisterGenCB(vjFFBCallback, NULL);
     ResetVJD(vjDev);
 
     return true;

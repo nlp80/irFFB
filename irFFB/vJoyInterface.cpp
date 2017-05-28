@@ -121,7 +121,6 @@ extern "C" {
 		DWORD	nBytesTranss = 1;
 		HANDLE hIoctlEvent;
 		OVERLAPPED FfbOverlapped = { 0 };
-        int type;
 
 		// Signal the parent thread that this thread was created
 		SetEvent(hFfbEvent);
@@ -140,7 +139,6 @@ extern "C" {
 			FfbOverlapped.hEvent = hIoctlEvent;
 			if (DeviceIoControl(h, IoCode, NULL, 0, FfbDataPacket, IoSize, &bytes, &FfbOverlapped))
                 continue;
-
 			if (GetLastError() != ERROR_IO_PENDING)
 				continue;
 
@@ -154,8 +152,7 @@ extern "C" {
             if (FfbDataPacket->size < 10 || FfbDataPacket->cmd != IOCTL_HID_WRITE_REPORT)
                 continue;
 
-            type = FfbDataPacket->data[0] & 0xF;
-            if (type != PT_CONSTREP && type != PT_PRIDREP)
+            if ((FfbDataPacket->data[0] & 0xF) != PT_CONSTREP)
                 continue;
 
             SetEvent(ffbReadyEvent);

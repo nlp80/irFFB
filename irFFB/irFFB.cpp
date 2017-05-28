@@ -166,7 +166,6 @@ DWORD WINAPI readWheelThread(LPVOID lParam) {
 DWORD WINAPI directFFBThread(LPVOID lParam) {
 
     UNREFERENCED_PARAMETER(lParam);
-    UCHAR type;
     int16_t mag;
 
     float s;
@@ -187,14 +186,7 @@ DWORD WINAPI directFFBThread(LPVOID lParam) {
         if (((ffbPacket.data[0] & 0xF0) >> 4) != vjDev)
             continue;
         
-        type = ffbPacket.data[0] & 0x0F;
-
-        if (type == PT_CONSTREP)
-            mag = (ffbPacket.data[3] << 8) + ffbPacket.data[2];
-        else if (type == PT_PRIDREP)
-            mag = (ffbPacket.data[5] << 8) + ffbPacket.data[4];
-        else
-            continue;
+        mag = (ffbPacket.data[3] << 8) + ffbPacket.data[2];
 
         QueryPerformanceCounter(&start);
 

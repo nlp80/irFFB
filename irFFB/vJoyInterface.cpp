@@ -19,13 +19,12 @@ extern "C"
 
 // Structure that holds initial values of device controls
 struct DEVICE_INIT_VALS {
-	UCHAR cb;				// Size in bytes of this structure
-	USHORT id;				// Device ID
-	UCHAR InitValAxis[8];	// Initial Value of axes (X, Y, Z, RX, RY, RZ, SL1, SL2)  in %
-	UCHAR InitValPov[4];	// Initial Value of POVs in % (0xFF means neutral point)
-	UCHAR ButtonMask[16];	// Each bit represents a button
-} ;
-
+    UCHAR cb;				// Size in bytes of this structure
+    USHORT id;				// Device ID
+    UCHAR InitValAxis[8];	// Initial Value of axes (X, Y, Z, RX, RY, RZ, SL1, SL2)  in %
+    UCHAR InitValPov[4];	// Initial Value of POVs in % (0xFF means neutral point)
+    UCHAR ButtonMask[16];	// Each bit represents a button
+};
 
 typedef std::map<int, DeviceStat> vJoyDeviceMap;
 
@@ -59,16 +58,16 @@ int		DbgGetCaps(void);
 INT		GetControls(UINT rID);
 BOOL	AreControlsInit(UINT rID);
 
-BOOL vJoyDeviceEntry(int rID);
-BOOL vJoyDeviceRemove(int rID);
-void vJoyDeviceClear(void);
-BOOL  Set_PreparsedData(int rID);
-BOOL Get_PreparsedData(int rID, PHIDP_PREPARSED_DATA * pPPData);
-void Set_h(int rID, HANDLE h);
-void Sync_Position(int rID);
+BOOL    vJoyDeviceEntry(int rID);
+BOOL    vJoyDeviceRemove(int rID);
+void    vJoyDeviceClear(void);
+BOOL    Set_PreparsedData(int rID);
+BOOL    Get_PreparsedData(int rID, PHIDP_PREPARSED_DATA * pPPData);
+void    Set_h(int rID, HANDLE h);
+void    Sync_Position(int rID);
 HANDLE 	Get_h(int rID);
-void Set_stat(int rID, VjdStat status);
-VjdStat  Get_stat(int rID);
+void    Set_stat(int rID, VjdStat status);
+VjdStat Get_stat(int rID);
 
 /******* Global variables *******/
 BOOL Init = FALSE; // DLL Initialized
@@ -78,75 +77,71 @@ HANDLE ffbReadyEvent = INVALID_HANDLE_VALUE;
 
 /// FFB ///
 std::map<int, FFB_EFFECTS> mFfbEffect;
-FFB_DATA	*FfbDataPacket;
-
+FFB_DATA *FfbDataPacket;
 HANDLE hFfbEvent;
-
-#define SET_NS(x) x
-
 
 extern "C" {
 
-	bool	FfbStartThread(HANDLE h);
-	int		WINAPI FfbWaitForData(HANDLE *);
+    bool	FfbStartThread(HANDLE h);
+    int		WINAPI FfbWaitForData(HANDLE *);
 
-	///// Force Feedback related functions //////////////////////////////////////////
+    ///// Force Feedback related functions //////////////////////////////////////////
 
-	bool  FfbStartThread(HANDLE h)
-	{
+    bool  FfbStartThread(HANDLE h)
+    {
 
-		// Start a thread that waits for FFB data
-		hFfbEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
-		if (!hFfbEvent)
-			return false;
+        // Start a thread that waits for FFB data
+        hFfbEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+        if (!hFfbEvent)
+            return false;
 
-		SetThreadPriority(CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)&FfbWaitForData, h, 0, nullptr), THREAD_PRIORITY_HIGHEST);
+        SetThreadPriority(CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)&FfbWaitForData, h, 0, nullptr), THREAD_PRIORITY_HIGHEST);
 
-		// Wait for the FFB thread to be created
-		DWORD waitRes = WaitForSingleObject(hFfbEvent, 10000);
-		if (waitRes != WAIT_OBJECT_0)
-			return false;
+        // Wait for the FFB thread to be created
+        DWORD waitRes = WaitForSingleObject(hFfbEvent, 10000);
+        if (waitRes != WAIT_OBJECT_0)
+            return false;
         return true;
 
-	}
+    }
 
-	int	  WINAPI FfbWaitForData(HANDLE *h)
-	{
-		// Loop on read FFB data from vJoy
+    int	  WINAPI FfbWaitForData(HANDLE *h)
+    {
+        // Loop on read FFB data from vJoy
 
-		UINT	IoCode = GET_FFB_DATA;
-		UINT	IoSize = FFB_DATA_MAX_SIZE + 8;
-		ULONG	bytes;
-		BOOL	gotdata;
-		DWORD	nBytesTranss = 1;
-		HANDLE hIoctlEvent;
-		OVERLAPPED FfbOverlapped = { 0 };
+        UINT	IoCode = GET_FFB_DATA;
+        UINT	IoSize = FFB_DATA_MAX_SIZE + 8;
+        ULONG	bytes;
+        BOOL	gotdata;
+        DWORD	nBytesTranss = 1;
+        HANDLE hIoctlEvent;
+        OVERLAPPED FfbOverlapped = { 0 };
 
-		// Signal the parent thread that this thread was created
-		SetEvent(hFfbEvent);
+        // Signal the parent thread that this thread was created
+        SetEvent(hFfbEvent);
 
-		// Send joystick position structure to vJoy device
-		hIoctlEvent = CreateEvent(NULL, TRUE, TRUE, NULL);
+        // Send joystick position structure to vJoy device
+        hIoctlEvent = CreateEvent(NULL, TRUE, TRUE, NULL);
 
-		// Prepare container for incoming data
-		FfbDataPacket->size = 0;
-		FfbDataPacket->cmd = 0;
+        // Prepare container for incoming data
+        FfbDataPacket->size = 0;
+        FfbDataPacket->cmd = 0;
 
-		while(true)
-		{
-			// This is an async (overlapped) transaction
-			memset(&FfbOverlapped, 0, sizeof(OVERLAPPED));
-			FfbOverlapped.hEvent = hIoctlEvent;
-			if (DeviceIoControl(h, IoCode, NULL, 0, FfbDataPacket, IoSize, &bytes, &FfbOverlapped))
+        while(true)
+        {
+            // This is an async (overlapped) transaction
+            memset(&FfbOverlapped, 0, sizeof(OVERLAPPED));
+            FfbOverlapped.hEvent = hIoctlEvent;
+            if (DeviceIoControl(h, IoCode, NULL, 0, FfbDataPacket, IoSize, &bytes, &FfbOverlapped))
                 continue;
-			if (GetLastError() != ERROR_IO_PENDING)
-				continue;
+            if (GetLastError() != ERROR_IO_PENDING)
+                continue;
 
-			// Wait until data ready
-		    nBytesTranss = 0;
-			gotdata = GetOverlappedResult(h, &FfbOverlapped, &nBytesTranss, TRUE);
-				
-			if (!gotdata || !nBytesTranss || ffbReadyEvent == INVALID_HANDLE_VALUE)
+            // Wait until data ready
+            nBytesTranss = 0;
+            gotdata = GetOverlappedResult(h, &FfbOverlapped, &nBytesTranss, TRUE);
+                
+            if (!gotdata || !nBytesTranss || ffbReadyEvent == INVALID_HANDLE_VALUE)
                 continue;
 
             if (FfbDataPacket->size < 10 || FfbDataPacket->cmd != IOCTL_HID_WRITE_REPORT)
@@ -157,739 +152,739 @@ extern "C" {
 
             SetEvent(ffbReadyEvent);
 
-		}
+        }
 
-		return 0;
-	
+        return 0;
+    
     }
 
 } // extern "C"
 
 
 /// Interface functions
-	extern "C" {
+    extern "C" {
 
-	VJOYINTERFACE_API BOOL	__cdecl	AcquireVJD(UINT rID, HANDLE fEvent, FFB_DATA *pkt)
-		/*
-			Open handle to VJD for writing position data
-			Input:
-				rID: Report ID (range 1-16)
-			Output:
-				TRUE if successful, False otherwise
+    VJOYINTERFACE_API BOOL	__cdecl	AcquireVJD(UINT rID, HANDLE fEvent, FFB_DATA *pkt)
+        /*
+            Open handle to VJD for writing position data
+            Input:
+                rID: Report ID (range 1-16)
+            Output:
+                TRUE if successful, False otherwise
 
-			Comments:
-				Don't forget to close handle when done
-				An open handle prevents the system from disabling/removing Raw PDO
-		*/
-	{
-		DWORD error;
+            Comments:
+                Don't forget to close handle when done
+                An open handle prevents the system from disabling/removing Raw PDO
+        */
+    {
+        DWORD error;
 
-		if (rID < 1 || rID > 16)
-			return FALSE;
+        if (rID < 1 || rID > 16)
+            return FALSE;
 
-		if (Get_stat(rID) == VJD_STAT_OWN)
-			return TRUE;
+        if (Get_stat(rID) == VJD_STAT_OWN)
+            return TRUE;
 
-		HANDLE hTmp = OpenDeviceInterface(rID, &error);
-		Set_h(rID, hTmp);
-		if (hTmp != INVALID_HANDLE_VALUE)
-		{
+        HANDLE hTmp = OpenDeviceInterface(rID, &error);
+        Set_h(rID, hTmp);
+        if (hTmp != INVALID_HANDLE_VALUE)
+        {
             FfbDataPacket = pkt;
             ffbReadyEvent = fEvent;
-			Set_stat(rID, VJD_STAT_OWN);
-			Sync_Position(rID);
-			if (IsDeviceFfb(rID))
-				FfbStartThread(hTmp);
-			return TRUE;
-		}
-		else
-		{
-			vJoyDeviceRemove(rID);
-			return FALSE;
-		}
-	}
+            Set_stat(rID, VJD_STAT_OWN);
+            Sync_Position(rID);
+            if (IsDeviceFfb(rID))
+                FfbStartThread(hTmp);
+            return TRUE;
+        }
+        else
+        {
+            vJoyDeviceRemove(rID);
+            return FALSE;
+        }
+    }
 
 
-	VJOYINTERFACE_API VOID	__cdecl	RelinquishVJD(UINT rID)
-	{
-		if (rID < 1 || rID>16 || Get_h(rID) == INVALID_HANDLE_VALUE)
-			return;
+    VJOYINTERFACE_API VOID	__cdecl	RelinquishVJD(UINT rID)
+    {
+        if (rID < 1 || rID>16 || Get_h(rID) == INVALID_HANDLE_VALUE)
+            return;
 
-		//	FfbStop(Get_h(rID));
-		Set_h(rID, INVALID_HANDLE_VALUE);
-		//	CloseHandle(Get_h(rID));
-		Set_stat(rID, VJD_STAT_FREE);
+        //	FfbStop(Get_h(rID));
+        Set_h(rID, INVALID_HANDLE_VALUE);
+        //	CloseHandle(Get_h(rID));
+        Set_stat(rID, VJD_STAT_FREE);
         ffbReadyEvent = INVALID_HANDLE_VALUE;
         FfbDataPacket = nullptr;
-	}
-
-	VJOYINTERFACE_API BOOL	__cdecl	UpdateVJD(UINT rID, PVOID pData)
-		/**
-			First, the saved position is updated.
-			Then,
-			This function writes the position data to the specified VJD
-			The VJD should be open for writing. If not the function returns FALSE
-			If the data is NULL or if the Report ID (rID) is out of range then the function returns FALSE.
-			The function will return TRUE only if the writing was successful
-		**/
-	{
-		// Make sure the the ID is set
-		((PJOYSTICK_POSITION_V2)pData)->bDevice = (BYTE)rID;
-
-		// Update saved position
-		SavePosition(rID, pData);
-
-		// Send joystick position structure to vJoy device
-		return Update(rID);
-	}
-
-	VJOYINTERFACE_API BOOL	__cdecl	isVJDExists(UINT rID)
-	{
-		int nbytes = 10;
-		BYTE buffer[10] = { 0 };
-		BYTE * buf = buffer;
-
-		bool ok = GetDevStat(rID, &nbytes, buf);
-
-		// If output is undefined then this state is unknown
-		if (!ok)
-			return FALSE;
-
-		// Device  exists?
-		if (buf[0] & 0x01)
-			return TRUE;
-		else
-			return FALSE;
-
-	}
-
-	VJOYINTERFACE_API enum VjdStat	__cdecl	GetVJDStatus(UINT rID)
-		/**
-			Get the status of a specified vJoy Device (VJD)
-			Here are the possible statuses and how they are obtained:
-			1. VJD_STAT_OWN:	The  vJoy Device is owned by this application.
-				An owned VJD is marked as one when acqired in the corresponding stat[] entry.
-			2. VJD_STAT_FREE:	The  vJoy Device is NOT owned by any application (including this one).
-				First it is checked that the VJD is not OWNED by the application.
-				Then it this function tries to open a handle to it. If succesful then it is FREE (the handle is then closed)
-			3. VJD_STAT_BUSY:	The  vJoy Device is owned by another application. It cannot be acquired by this application.
-				First it is checked that the VJD is not OWNED by the application.
-				Then it this function tries to open a handle to it.
-				If failes with error  ERROR_ACCESS_DENIED then it is BUSY.
-			4. VJD_STAT_MISS:	The  vJoy Device is missing. It either does not exist or the driver is down.
-				First it is checked that the VJD is not OWNED by the application.
-				Then it this function tries to open a handle to it.
-				If failes with error other than ERROR_ACCESS_DENIED then it is MISSing.
-			5. VJD_STAT_UNKN: Unknown state.
-		**/
-	{
-
-		int nbytes = 10;
-		BYTE buffer[10] = { 0 };
-		BYTE * buf = buffer;
-
-		bool ok = GetDevStat(rID, &nbytes, buf);
-
-		// If output is undefined then this state is unknown
-		if (!ok)
-		{
-			return VJD_STAT_UNKN;
-		}
-
-		// Device does not exists?
-		if (!(buf[0] & 0x01))
-		{
-			Set_stat(rID, VJD_STAT_MISS);
-			return Get_stat(rID);
-		}
-
-		// Device not associated with a file object?
-		if (!(buf[0] & 0x04))
-		{
-			Set_stat(rID, VJD_STAT_FREE);
-			return Get_stat(rID);
-		}
-
-		// If Process ID of the process that created the file object is the same as this
-		// then the device is owned by this process
-		DWORD CurrPid = GetCurrentProcessId();
-		DWORD DevPid = *(DWORD *)(&(buf[1]));
-		if (CurrPid == DevPid)
-			Set_stat(rID, VJD_STAT_OWN);
-		else
-			Set_stat(rID, VJD_STAT_BUSY);
-
-		return Get_stat(rID);
-
-	}
-
-	VJOYINTERFACE_API BOOL	__cdecl isVJDOpen(UINT rID)
-	{
-		DWORD e;
-
-		HANDLE h = OpenDeviceInterface(rID, &e);
-		if (h != INVALID_HANDLE_VALUE)
-			CloseHandle(h);
-		if (e == ERROR_ACCESS_DENIED)
-			return TRUE;
-		return FALSE;
-	}
-
-	VJOYINTERFACE_API SHORT	__cdecl GetvJoyVersion(void)
-		/*
-			Get the version number of the installed vJoy driver
-			Returns 0 if fails
-		*/
-	{
-
-		USHORT version = 0;
-		int res = 1;
-
-		int i = GetDeviceIndexById(VENDOR_N_ID, PRODUCT_N_ID, 0);
-		if (i < 0)
-			return 0;
-
-		res = GetDeviceVersionNumber(i, &version);
-		if (res < 0)
-			return 0;
-
-		return version;
-	}
-
-	VJOYINTERFACE_API BOOL	__cdecl	DriverMatch(WORD * DllVer, WORD * DrvVer)
-		/*
-			Compare the version of this DLL to the driver's
-			Return TRUE if identical, otherwise return FALSE
-			If DllVer a valid pointer - sets the version of this DLL file	(e.g. 0x0205)
-			If DrvVer a valid pointer - sets the version of driver			(e.g. 0x0205)
-			*/
-	{
-
-		WORD vJoyVersion = GetvJoyVersion();
-		WORD DLLVersion = (VER_X_ << 12) + (VER_H_ << 8) + (VER_M_ << 4) + VER_L_;
-
-		if (DllVer)
-			*DllVer = DLLVersion;
-		if (DrvVer)
-			*DrvVer = vJoyVersion;
-
-		return (DLLVersion == vJoyVersion);
-	}
-
-	VJOYINTERFACE_API BOOL	__cdecl GetVJDAxisExist(UINT rID, UINT Axis)
-		/*
-			This function returns TRUE if Axis exists
-			Otherwise FALSE.
-			Axis can be in the range 0x30-0x39 (HID_USAGE_X - HID_USAGE_POV)
-			as defined in header file public.h
-		*/
-	{
-		HIDP_VALUE_CAPS pValCaps;
-		return GetAxisCaps(rID, Axis, &pValCaps);
-
-		if (!AreControlsInit(rID))
-			GetControls(rID);
-
-		switch (Axis)
-		{
-			case HID_USAGE_X:
-				return vJoyDevices[rID].DeviceControls.AxisX;
-			case HID_USAGE_Y:
-				return vJoyDevices[rID].DeviceControls.AxisY;
-			case HID_USAGE_Z:
-				return vJoyDevices[rID].DeviceControls.AxisZ;
-				break;
-			case HID_USAGE_RX:
-				return vJoyDevices[rID].DeviceControls.AxisXRot;
-				break;
-			case HID_USAGE_RY:
-				return vJoyDevices[rID].DeviceControls.AxisYRot;
-				break;
-			case HID_USAGE_RZ:
-				return vJoyDevices[rID].DeviceControls.AxisZRot;
-				break;
-			case HID_USAGE_SL0:
-				return vJoyDevices[rID].DeviceControls.Slider;
-				break;
-			case HID_USAGE_SL1:
-				return vJoyDevices[rID].DeviceControls.Dial;
-				break;
-			case HID_USAGE_WHL:
-				return vJoyDevices[rID].DeviceControls.Wheel;
-		};
-
-		return FALSE;
-
-	}
-	VJOYINTERFACE_API BOOL	__cdecl GetVJDAxisMax(UINT rID, UINT Axis, LONG * Max)
-	{
-		// Get logical Maximum value for a given axis defined in the specified VDJ
-		HIDP_VALUE_CAPS ValCaps;
-		if (GetAxisCaps(rID, Axis, &ValCaps) < 0)
-			return FALSE;
-		*Max = ValCaps.LogicalMax;
-		return TRUE;
-	}
-	VJOYINTERFACE_API BOOL	__cdecl GetVJDAxisMin(UINT rID, UINT Axis, LONG * Min)
-	{
-		// Get logical Maximum value for a given axis defined in the specified VDJ
-		HIDP_VALUE_CAPS ValCaps;
-		if (GetAxisCaps(rID, Axis, &ValCaps) < 0)
-			return FALSE;
-		*Min = ValCaps.LogicalMin;
-		return TRUE;
-	}
-
-
-	VJOYINTERFACE_API int	__cdecl GetVJDButtonNumber(UINT rID)
-		/*
-			This function returns number of buttons for the specified device
-			If fales: Negative number
-		*/
-	{
-		NTSTATUS stat = HIDP_STATUS_SUCCESS;
-		PHIDP_PREPARSED_DATA PreparsedData = NULL;
-		HIDP_CAPS Capabilities;
-
-		if (!AreControlsInit(rID))
-			GetControls(rID);
-		return 	 vJoyDevices[rID].DeviceControls.nButtons;
-
-		HANDLE h = INVALID_HANDLE_VALUE;
-		BOOL ok = Get_PreparsedData(rID, &PreparsedData);
-
-		if (!ok)
-		{
-			CloseHandle(h);
-			return BAD_PREPARSED_DATA;
-		}
-		else
-			stat = HidP_GetCaps(PreparsedData, &Capabilities);
-		if (stat != HIDP_STATUS_SUCCESS)
-		{
-			CloseHandle(h);
-			return NO_CAPS;
-		}
-
-		// Get Button data
-		int ButtonBaseIndex, nButtons = 0;
-		USHORT n = Capabilities.NumberInputButtonCaps;
-		if (n < 1)
-		{
-			CloseHandle(h);
-			return BAD_N_BTN_CAPS;
-		}
-		HIDP_BUTTON_CAPS 	* bCaps = new HIDP_BUTTON_CAPS[n];
-		SecureZeroMemory(bCaps, sizeof(HIDP_BUTTON_CAPS)*n);
-		stat = HidP_GetButtonCaps(HidP_Input, bCaps, &n, PreparsedData);
-		if (stat != HIDP_STATUS_SUCCESS)
-		{
-			CloseHandle(h);
-			delete[] 	bCaps;
-			return BAD_BTN_CAPS;
-		}
-
-		// Assuming one button range, get the number of buttons
-		if (bCaps[0].IsRange)
-		{
-			nButtons += (bCaps[0].Range).UsageMax - (bCaps[0].Range).UsageMin + 1;
-			ButtonBaseIndex = (bCaps[0].Range).DataIndexMin;
-		}
-		else
-		{
-			CloseHandle(h);
-			delete[] 	bCaps;
-			return BAD_BTN_RANGE;
-		}
-
-		delete[] 	bCaps;
-		//	HidD_FreePreparsedData(PreparsedData);
-		CloseHandle(h);
-
-		return nButtons;
-	}
-
-
-	VJOYINTERFACE_API int	__cdecl GetVJDDiscPovNumber(UINT rID)
-		/*
-			This function returns the number of discrete POV Hat switch on the specified vJoy device
-			The function returns -1 if error.
-		*/
-	{
-		if (!AreControlsInit(rID))
-			GetControls(rID);
-		return 	 vJoyDevices[rID].DeviceControls.nDescHats;
-
-		NTSTATUS stat = HIDP_STATUS_SUCCESS;
-		PHIDP_PREPARSED_DATA PreparsedData = NULL;
-		HIDP_CAPS Capabilities;
-		SecureZeroMemory(&Capabilities, sizeof(HIDP_CAPS));
-		int res = 0;
-
-		HANDLE h = INVALID_HANDLE_VALUE;
-		BOOL ok = Get_PreparsedData(rID, &PreparsedData);
-
-		if (!ok)
-		{
-			CloseHandle(h);
-			return 0;
-		};
-		stat = HidP_GetCaps(PreparsedData, &Capabilities);
-		if (stat != HIDP_STATUS_SUCCESS)
-		{
-			CloseHandle(h);
-			return 0;
-		}
-
-		// Get data related to values (axes/POVs)
-		int Usage, DataIndex;
-		USHORT n = Capabilities.NumberInputValueCaps;
-		if (n < 1)
-		{
-			CloseHandle(h);
-			return 0;
-		}
-
-		PHIDP_VALUE_CAPS vCaps = new HIDP_VALUE_CAPS[1 + n]; // Added 1 just to make the Analyzer happy
-		stat = HidP_GetValueCaps(HidP_Input, vCaps, &n, PreparsedData);
-		if (stat == HIDP_STATUS_SUCCESS)
-		{
-			for (int i = 0; i < n; i++) // Loop on all values
-			{
-				Usage = ((vCaps[i]).NotRange).Usage; // Usage is the code of the axis (0x30="X", 0x39="POV etc.)
-				if ((HID_USAGE_POV == Usage) && (vCaps[i].LogicalMax == 3))
-				{
-					res++;
-				}
-				DataIndex = ((vCaps[i]).NotRange).DataIndex; // Every control has an index
-			}
-		}
-
-		//HidD_FreePreparsedData(PreparsedData);
-		delete[](vCaps);
-		CloseHandle(h);
-
-		return res;
-	}
-
-	VJOYINTERFACE_API int	__cdecl GetVJDContPovNumber(UINT rID)
-	{
-		/*
-			This function returns number of continous POV switches if it succeeds
-			or negative number if fails
-		*/
-		if (!AreControlsInit(rID))
-			GetControls(rID);
-		return 	 vJoyDevices[rID].DeviceControls.nContHats;
-
-		int res = 0;
-		NTSTATUS stat = HIDP_STATUS_SUCCESS;
-		PHIDP_PREPARSED_DATA PreparsedData = NULL;
-		HIDP_CAPS Capabilities;
-
-		HANDLE h = INVALID_HANDLE_VALUE;
-		BOOL ok = Get_PreparsedData(rID, &PreparsedData);
-
-		if (!ok)
-		{
-			CloseHandle(h);
-			return 0;
-		}
-		stat = HidP_GetCaps(PreparsedData, &Capabilities);
-		if (stat != HIDP_STATUS_SUCCESS)
-		{
-			CloseHandle(h);
-			return 0;
-		}
-
-		// Get data related to values (axes/POVs)
-		int Usage, DataIndex;
-		USHORT n = Capabilities.NumberInputValueCaps;
-		if (n < 1)
-		{
-			CloseHandle(h);
-			return 0;
-		}
-
-		PHIDP_VALUE_CAPS vCaps = new HIDP_VALUE_CAPS[1 + n]; // Added 1 just to make the Analyzer happy
-		stat = HidP_GetValueCaps(HidP_Input, vCaps, &n, PreparsedData);
-		if (stat == HIDP_STATUS_SUCCESS)
-		{
-			for (int i = 0; i < n; i++) // Loop on all values
-			{
-				Usage = ((vCaps[i]).NotRange).Usage; // Usage is the code of the axis (0x30="X", 0x39="POV1 etc.)
-				if ((HID_USAGE_POV == Usage) && (vCaps[i].LogicalMax > 3))
-				{
-					//CloseHandle(h);
-					res++;
-				}
-				DataIndex = ((vCaps[i]).NotRange).DataIndex; // Every control has an index
-			}
-		}
-
-		//HidD_FreePreparsedData(PreparsedData);
-		delete[](vCaps);
-		CloseHandle(h);
-
-		return res;
-	}
-
-	VJOYINTERFACE_API BOOL	__cdecl	ResetVJD(UINT rID)
-	{
-
-		UINT	IoCode = RESET_DEV;
-		HANDLE	h = NULL;
-		HANDLE	hIoctlEvent;
-		OVERLAPPED OverLapped = { 0 };
-		ULONG	bytes = 0;
-
-		// Handle to device
-		if (rID)
-			h = Get_h(rID);
-		else
-			h = GetGenControlHandle();
-
-		// Preparing
-		hIoctlEvent = CreateEvent(NULL, TRUE, TRUE, NULL);
-		memset(&OverLapped, 0, sizeof(OVERLAPPED));
-		OverLapped.hEvent = hIoctlEvent;
-
-		// Sending RESET message to device
-		BOOL	res = DeviceIoControl(h, IoCode, NULL, 0, NULL, 0, &bytes, &OverLapped);
-		if (!res)
-		{
-			// The transaction was not completed.
-			// If it is just because it is pending then wait otherwise it is an error
-			DWORD err = GetLastError();
-			if (err != ERROR_IO_PENDING)
-			{
-				CloseHandle(OverLapped.hEvent);
-				return FALSE;
-			}
-			else
-			{	// Wait for write to complete
-				DWORD WaitRet = WaitForSingleObject(OverLapped.hEvent, 500);
-				if (WAIT_OBJECT_0 != WaitRet)
-				{
-					CloseHandle(OverLapped.hEvent);
-					return FALSE;
-				}
-			}
-		}
-		CloseHandle(OverLapped.hEvent);
-		return TRUE;
-	}
-
-
-	/*
-	Test if a given device supports a specific FFB Effect
-	Indicate device by Device ID
-	Indicate effect by its usage
-	If Device supports the FFB effect then return TRUE
-	Else return FALSE
-	*/
-	VJOYINTERFACE_API BOOL	__cdecl		IsDeviceFfbEffect(UINT rID, UINT Effect)
-	{
-		NTSTATUS stat = HIDP_STATUS_SUCCESS;
-		PHIDP_PREPARSED_DATA PreparsedData = NULL;
-		HIDP_CAPS Capabilities;
-
-		// Get the Value Capabilities of a given axis in a given device
-		HANDLE h = INVALID_HANDLE_VALUE;
-		BOOL ok = Get_PreparsedData(rID, &PreparsedData);
-
-		if (!ok)
-		{
-			//HidD_FreePreparsedData(PreparsedData);
-			CloseHandle(h);
-			return FALSE;
-		}
-
-		// returns a top-level collection's HIDP_CAPS structure.
-		stat = HidP_GetCaps(PreparsedData, &Capabilities);
-		if (stat != HIDP_STATUS_SUCCESS)
-		{
-			//HidD_FreePreparsedData(PreparsedData);
-			CloseHandle(h);
-			return FALSE;
-		}
-
-		// Get output buttons
-		USHORT nb_bu;
-		USHORT nb = Capabilities.NumberOutputButtonCaps;
-		if (nb < 4)
-			return FALSE;
-
-
-		HIDP_BUTTON_CAPS *	bCaps = new HIDP_BUTTON_CAPS[nb];
-		if (!bCaps)
-			return FALSE;
-		SecureZeroMemory(bCaps, sizeof(HIDP_BUTTON_CAPS)*nb);
-		nb_bu = nb;
-		stat = HidP_GetButtonCaps(HidP_Output, bCaps, &nb, PreparsedData);
-		if (FAILED(stat))
-			return FALSE;
-
-		if (nb > nb_bu)
-			return FALSE;
-
-		BOOL Out = FALSE;
-
-		if (nb < 1)
-			return FALSE;
-
-		if (stat == HIDP_STATUS_SUCCESS)
-		{
-			for (int i = 0; i < nb; i++) // Loop on all values
-				if ((bCaps[i].ReportID == (HID_ID_EFFREP + 0x10 * rID))     //    HID_ID_EFFREP + 0x10 * TLID	(This is for Device #1)
-					&& (bCaps[i].UsagePage == 0x0F) //    Usage Page Physical Interface
-					&& (bCaps[i].LinkUsage == 0x25) //    Usage Effect Type
-					&& (bCaps[i].NotRange.Usage == Effect) 	//    Usage Effect Type
-					)
-				{
-					Out = TRUE;
-					break;
-				}
-		}
-
-
-		//HidD_FreePreparsedData(PreparsedData);
-		delete[](bCaps);
-		CloseHandle(h);
-		return Out;
-	}
-
-	VJOYINTERFACE_API BOOL		__cdecl vJoyEnabled(void)
-	{
-		// Returns true if  VJD #0 is confugured
-		// which means that the Raw PDO exists
-		DWORD error = 0;
-		int Size;
-
-		if (GetDeviceNameSpace(NULL, &Size, FALSE, &error))
-			return true;
-		return false;
-
-	}
-
-	VJOYINTERFACE_API BOOL	__cdecl	vJoyFfbCap(BOOL * Supported)
-	{
-		int nbytes = 10;
-		BYTE buffer[10] = { 0 };
-		BYTE * buf = buffer;
-
-		if (!Supported)
-			return FALSE;
-
-		bool ok = GetDrvStat(&nbytes, buf);
-		if (!ok)
-			return FALSE;
-
-		*Supported = buffer[0] & 0x01;
-		return (TRUE);
-	}
-
-	VJOYINTERFACE_API BOOL	__cdecl	GetNumberExistingVJD(int * n)
-	{
-		int nbytes = 10;
-		BYTE buffer[10] = { 0 };
-		BYTE * buf = buffer;
-
-		if (!n)
-			return FALSE;
-
-		bool ok = GetDrvStat(&nbytes, buf);
-		if (!ok || nbytes < 3)
-			return FALSE;
-
-		*n = buffer[2];
-		return (TRUE);
-	}
-
-
-	VJOYINTERFACE_API BOOL	__cdecl	GetvJoyMaxDevices(int * n)
-	{
-		int nbytes = 10;
-		BYTE buffer[10] = { 0 };
-		BYTE * buf = buffer;
-
-		if (!n)
-			return FALSE;
-
-		bool ok = GetDrvStat(&nbytes, buf);
-		if (!ok || nbytes < 2)
-			return FALSE;
-
-		*n = buffer[1];
-		return (TRUE);
-	}
-
-	VJOYINTERFACE_API BOOL __cdecl IsDeviceFfb(UINT rID)
-	{
-		NTSTATUS stat = HIDP_STATUS_SUCCESS;
-		PHIDP_PREPARSED_DATA PreparsedData = NULL;
-		HIDP_CAPS Capabilities;
-
-		// Get the Value Capabilities of a given axis in a given device
-		HANDLE h = INVALID_HANDLE_VALUE;
-		BOOL ok = Get_PreparsedData(rID, &PreparsedData);
-
-		if (!ok)
-		{
-			//HidD_FreePreparsedData(PreparsedData);
-			CloseHandle(h);
-			return FALSE;
-		}
-
-		// returns a top-level collection's HIDP_CAPS structure.
-		stat = HidP_GetCaps(PreparsedData, &Capabilities);
-		if (stat != HIDP_STATUS_SUCCESS)
-		{
-			//HidD_FreePreparsedData(PreparsedData);
-			CloseHandle(h);
-			return FALSE;
-		}
-
-		// Get data related to output values
-		ULONG n = Capabilities.NumberLinkCollectionNodes;
-		if (n<1)
-		{
-			CloseHandle(h);
-			//HidD_FreePreparsedData(PreparsedData);
-			return FALSE;
-		}
-
-		// Get array of of link collections
-		PHIDP_LINK_COLLECTION_NODE vLinks = new   HIDP_LINK_COLLECTION_NODE[1 + n];
-		stat = HidP_GetLinkCollectionNodes(vLinks, &n, PreparsedData);
-		if (FAILED(stat))
-			return FALSE;
-
-		// Loop on every link
-		BOOL Out = FALSE;
-		for (UINT cnt = 0; cnt < n; cnt++)
-		{
-			HIDP_LINK_COLLECTION_NODE Link = vLinks[cnt];
-
-			// This collection is:
-			//  Usage Set Effect Report(0x21),
-			//  Usage Page Physical Interface (0x0F),
-			//	Type= Output (2)
-			if (Link.LinkUsage == 0x21 && Link.LinkUsagePage == 0xf && Link.CollectionType == 2)
-			{
-				// Found
-				Out = TRUE;
-				break;
-			}
-		}
-
-		// Cleanuo & Exit
-		//HidD_FreePreparsedData(PreparsedData);
-		delete[](vLinks);
-		CloseHandle(h);
-		return Out;
-
-	}
+    }
+
+    VJOYINTERFACE_API BOOL	__cdecl	UpdateVJD(UINT rID, PVOID pData)
+        /**
+            First, the saved position is updated.
+            Then,
+            This function writes the position data to the specified VJD
+            The VJD should be open for writing. If not the function returns FALSE
+            If the data is NULL or if the Report ID (rID) is out of range then the function returns FALSE.
+            The function will return TRUE only if the writing was successful
+        **/
+    {
+        // Make sure the the ID is set
+        ((PJOYSTICK_POSITION_V2)pData)->bDevice = (BYTE)rID;
+
+        // Update saved position
+        SavePosition(rID, pData);
+
+        // Send joystick position structure to vJoy device
+        return Update(rID);
+    }
+
+    VJOYINTERFACE_API BOOL	__cdecl	isVJDExists(UINT rID)
+    {
+        int nbytes = 10;
+        BYTE buffer[10] = { 0 };
+        BYTE * buf = buffer;
+
+        bool ok = GetDevStat(rID, &nbytes, buf);
+
+        // If output is undefined then this state is unknown
+        if (!ok)
+            return FALSE;
+
+        // Device  exists?
+        if (buf[0] & 0x01)
+            return TRUE;
+        else
+            return FALSE;
+
+    }
+
+    VJOYINTERFACE_API enum VjdStat	__cdecl	GetVJDStatus(UINT rID)
+        /**
+            Get the status of a specified vJoy Device (VJD)
+            Here are the possible statuses and how they are obtained:
+            1. VJD_STAT_OWN:	The  vJoy Device is owned by this application.
+                An owned VJD is marked as one when acqired in the corresponding stat[] entry.
+            2. VJD_STAT_FREE:	The  vJoy Device is NOT owned by any application (including this one).
+                First it is checked that the VJD is not OWNED by the application.
+                Then it this function tries to open a handle to it. If succesful then it is FREE (the handle is then closed)
+            3. VJD_STAT_BUSY:	The  vJoy Device is owned by another application. It cannot be acquired by this application.
+                First it is checked that the VJD is not OWNED by the application.
+                Then it this function tries to open a handle to it.
+                If failes with error  ERROR_ACCESS_DENIED then it is BUSY.
+            4. VJD_STAT_MISS:	The  vJoy Device is missing. It either does not exist or the driver is down.
+                First it is checked that the VJD is not OWNED by the application.
+                Then it this function tries to open a handle to it.
+                If failes with error other than ERROR_ACCESS_DENIED then it is MISSing.
+            5. VJD_STAT_UNKN: Unknown state.
+        **/
+    {
+
+        int nbytes = 10;
+        BYTE buffer[10] = { 0 };
+        BYTE * buf = buffer;
+
+        bool ok = GetDevStat(rID, &nbytes, buf);
+
+        // If output is undefined then this state is unknown
+        if (!ok)
+        {
+            return VJD_STAT_UNKN;
+        }
+
+        // Device does not exists?
+        if (!(buf[0] & 0x01))
+        {
+            Set_stat(rID, VJD_STAT_MISS);
+            return Get_stat(rID);
+        }
+
+        // Device not associated with a file object?
+        if (!(buf[0] & 0x04))
+        {
+            Set_stat(rID, VJD_STAT_FREE);
+            return Get_stat(rID);
+        }
+
+        // If Process ID of the process that created the file object is the same as this
+        // then the device is owned by this process
+        DWORD CurrPid = GetCurrentProcessId();
+        DWORD DevPid = *(DWORD *)(&(buf[1]));
+        if (CurrPid == DevPid)
+            Set_stat(rID, VJD_STAT_OWN);
+        else
+            Set_stat(rID, VJD_STAT_BUSY);
+
+        return Get_stat(rID);
+
+    }
+
+    VJOYINTERFACE_API BOOL	__cdecl isVJDOpen(UINT rID)
+    {
+        DWORD e;
+
+        HANDLE h = OpenDeviceInterface(rID, &e);
+        if (h != INVALID_HANDLE_VALUE)
+            CloseHandle(h);
+        if (e == ERROR_ACCESS_DENIED)
+            return TRUE;
+        return FALSE;
+    }
+
+    VJOYINTERFACE_API SHORT	__cdecl GetvJoyVersion(void)
+        /*
+            Get the version number of the installed vJoy driver
+            Returns 0 if fails
+        */
+    {
+
+        USHORT version = 0;
+        int res = 1;
+
+        int i = GetDeviceIndexById(VENDOR_N_ID, PRODUCT_N_ID, 0);
+        if (i < 0)
+            return 0;
+
+        res = GetDeviceVersionNumber(i, &version);
+        if (res < 0)
+            return 0;
+
+        return version;
+    }
+
+    VJOYINTERFACE_API BOOL	__cdecl	DriverMatch(WORD * DllVer, WORD * DrvVer)
+        /*
+            Compare the version of this DLL to the driver's
+            Return TRUE if identical, otherwise return FALSE
+            If DllVer a valid pointer - sets the version of this DLL file	(e.g. 0x0205)
+            If DrvVer a valid pointer - sets the version of driver			(e.g. 0x0205)
+            */
+    {
+
+        WORD vJoyVersion = GetvJoyVersion();
+        WORD DLLVersion = (VER_X_ << 12) + (VER_H_ << 8) + (VER_M_ << 4) + VER_L_;
+
+        if (DllVer)
+            *DllVer = DLLVersion;
+        if (DrvVer)
+            *DrvVer = vJoyVersion;
+
+        return (DLLVersion == vJoyVersion);
+    }
+
+    VJOYINTERFACE_API BOOL	__cdecl GetVJDAxisExist(UINT rID, UINT Axis)
+        /*
+            This function returns TRUE if Axis exists
+            Otherwise FALSE.
+            Axis can be in the range 0x30-0x39 (HID_USAGE_X - HID_USAGE_POV)
+            as defined in header file public.h
+        */
+    {
+        HIDP_VALUE_CAPS pValCaps;
+        return GetAxisCaps(rID, Axis, &pValCaps);
+
+        if (!AreControlsInit(rID))
+            GetControls(rID);
+
+        switch (Axis)
+        {
+            case HID_USAGE_X:
+                return vJoyDevices[rID].DeviceControls.AxisX;
+            case HID_USAGE_Y:
+                return vJoyDevices[rID].DeviceControls.AxisY;
+            case HID_USAGE_Z:
+                return vJoyDevices[rID].DeviceControls.AxisZ;
+                break;
+            case HID_USAGE_RX:
+                return vJoyDevices[rID].DeviceControls.AxisXRot;
+                break;
+            case HID_USAGE_RY:
+                return vJoyDevices[rID].DeviceControls.AxisYRot;
+                break;
+            case HID_USAGE_RZ:
+                return vJoyDevices[rID].DeviceControls.AxisZRot;
+                break;
+            case HID_USAGE_SL0:
+                return vJoyDevices[rID].DeviceControls.Slider;
+                break;
+            case HID_USAGE_SL1:
+                return vJoyDevices[rID].DeviceControls.Dial;
+                break;
+            case HID_USAGE_WHL:
+                return vJoyDevices[rID].DeviceControls.Wheel;
+        };
+
+        return FALSE;
+
+    }
+    VJOYINTERFACE_API BOOL	__cdecl GetVJDAxisMax(UINT rID, UINT Axis, LONG * Max)
+    {
+        // Get logical Maximum value for a given axis defined in the specified VDJ
+        HIDP_VALUE_CAPS ValCaps;
+        if (GetAxisCaps(rID, Axis, &ValCaps) < 0)
+            return FALSE;
+        *Max = ValCaps.LogicalMax;
+        return TRUE;
+    }
+    VJOYINTERFACE_API BOOL	__cdecl GetVJDAxisMin(UINT rID, UINT Axis, LONG * Min)
+    {
+        // Get logical Maximum value for a given axis defined in the specified VDJ
+        HIDP_VALUE_CAPS ValCaps;
+        if (GetAxisCaps(rID, Axis, &ValCaps) < 0)
+            return FALSE;
+        *Min = ValCaps.LogicalMin;
+        return TRUE;
+    }
+
+
+    VJOYINTERFACE_API int	__cdecl GetVJDButtonNumber(UINT rID)
+        /*
+            This function returns number of buttons for the specified device
+            If fales: Negative number
+        */
+    {
+        NTSTATUS stat = HIDP_STATUS_SUCCESS;
+        PHIDP_PREPARSED_DATA PreparsedData = NULL;
+        HIDP_CAPS Capabilities;
+
+        if (!AreControlsInit(rID))
+            GetControls(rID);
+        return 	 vJoyDevices[rID].DeviceControls.nButtons;
+
+        HANDLE h = INVALID_HANDLE_VALUE;
+        BOOL ok = Get_PreparsedData(rID, &PreparsedData);
+
+        if (!ok)
+        {
+            CloseHandle(h);
+            return BAD_PREPARSED_DATA;
+        }
+        else
+            stat = HidP_GetCaps(PreparsedData, &Capabilities);
+        if (stat != HIDP_STATUS_SUCCESS)
+        {
+            CloseHandle(h);
+            return NO_CAPS;
+        }
+
+        // Get Button data
+        int ButtonBaseIndex, nButtons = 0;
+        USHORT n = Capabilities.NumberInputButtonCaps;
+        if (n < 1)
+        {
+            CloseHandle(h);
+            return BAD_N_BTN_CAPS;
+        }
+        HIDP_BUTTON_CAPS 	* bCaps = new HIDP_BUTTON_CAPS[n];
+        SecureZeroMemory(bCaps, sizeof(HIDP_BUTTON_CAPS)*n);
+        stat = HidP_GetButtonCaps(HidP_Input, bCaps, &n, PreparsedData);
+        if (stat != HIDP_STATUS_SUCCESS)
+        {
+            CloseHandle(h);
+            delete[] 	bCaps;
+            return BAD_BTN_CAPS;
+        }
+
+        // Assuming one button range, get the number of buttons
+        if (bCaps[0].IsRange)
+        {
+            nButtons += (bCaps[0].Range).UsageMax - (bCaps[0].Range).UsageMin + 1;
+            ButtonBaseIndex = (bCaps[0].Range).DataIndexMin;
+        }
+        else
+        {
+            CloseHandle(h);
+            delete[] 	bCaps;
+            return BAD_BTN_RANGE;
+        }
+
+        delete[] 	bCaps;
+        //	HidD_FreePreparsedData(PreparsedData);
+        CloseHandle(h);
+
+        return nButtons;
+    }
+
+
+    VJOYINTERFACE_API int	__cdecl GetVJDDiscPovNumber(UINT rID)
+        /*
+            This function returns the number of discrete POV Hat switch on the specified vJoy device
+            The function returns -1 if error.
+        */
+    {
+        if (!AreControlsInit(rID))
+            GetControls(rID);
+        return 	 vJoyDevices[rID].DeviceControls.nDescHats;
+
+        NTSTATUS stat = HIDP_STATUS_SUCCESS;
+        PHIDP_PREPARSED_DATA PreparsedData = NULL;
+        HIDP_CAPS Capabilities;
+        SecureZeroMemory(&Capabilities, sizeof(HIDP_CAPS));
+        int res = 0;
+
+        HANDLE h = INVALID_HANDLE_VALUE;
+        BOOL ok = Get_PreparsedData(rID, &PreparsedData);
+
+        if (!ok)
+        {
+            CloseHandle(h);
+            return 0;
+        };
+        stat = HidP_GetCaps(PreparsedData, &Capabilities);
+        if (stat != HIDP_STATUS_SUCCESS)
+        {
+            CloseHandle(h);
+            return 0;
+        }
+
+        // Get data related to values (axes/POVs)
+        int Usage, DataIndex;
+        USHORT n = Capabilities.NumberInputValueCaps;
+        if (n < 1)
+        {
+            CloseHandle(h);
+            return 0;
+        }
+
+        PHIDP_VALUE_CAPS vCaps = new HIDP_VALUE_CAPS[1 + n]; // Added 1 just to make the Analyzer happy
+        stat = HidP_GetValueCaps(HidP_Input, vCaps, &n, PreparsedData);
+        if (stat == HIDP_STATUS_SUCCESS)
+        {
+            for (int i = 0; i < n; i++) // Loop on all values
+            {
+                Usage = ((vCaps[i]).NotRange).Usage; // Usage is the code of the axis (0x30="X", 0x39="POV etc.)
+                if ((HID_USAGE_POV == Usage) && (vCaps[i].LogicalMax == 3))
+                {
+                    res++;
+                }
+                DataIndex = ((vCaps[i]).NotRange).DataIndex; // Every control has an index
+            }
+        }
+
+        //HidD_FreePreparsedData(PreparsedData);
+        delete[](vCaps);
+        CloseHandle(h);
+
+        return res;
+    }
+
+    VJOYINTERFACE_API int	__cdecl GetVJDContPovNumber(UINT rID)
+    {
+        /*
+            This function returns number of continous POV switches if it succeeds
+            or negative number if fails
+        */
+        if (!AreControlsInit(rID))
+            GetControls(rID);
+        return 	 vJoyDevices[rID].DeviceControls.nContHats;
+
+        int res = 0;
+        NTSTATUS stat = HIDP_STATUS_SUCCESS;
+        PHIDP_PREPARSED_DATA PreparsedData = NULL;
+        HIDP_CAPS Capabilities;
+
+        HANDLE h = INVALID_HANDLE_VALUE;
+        BOOL ok = Get_PreparsedData(rID, &PreparsedData);
+
+        if (!ok)
+        {
+            CloseHandle(h);
+            return 0;
+        }
+        stat = HidP_GetCaps(PreparsedData, &Capabilities);
+        if (stat != HIDP_STATUS_SUCCESS)
+        {
+            CloseHandle(h);
+            return 0;
+        }
+
+        // Get data related to values (axes/POVs)
+        int Usage, DataIndex;
+        USHORT n = Capabilities.NumberInputValueCaps;
+        if (n < 1)
+        {
+            CloseHandle(h);
+            return 0;
+        }
+
+        PHIDP_VALUE_CAPS vCaps = new HIDP_VALUE_CAPS[1 + n]; // Added 1 just to make the Analyzer happy
+        stat = HidP_GetValueCaps(HidP_Input, vCaps, &n, PreparsedData);
+        if (stat == HIDP_STATUS_SUCCESS)
+        {
+            for (int i = 0; i < n; i++) // Loop on all values
+            {
+                Usage = ((vCaps[i]).NotRange).Usage; // Usage is the code of the axis (0x30="X", 0x39="POV1 etc.)
+                if ((HID_USAGE_POV == Usage) && (vCaps[i].LogicalMax > 3))
+                {
+                    //CloseHandle(h);
+                    res++;
+                }
+                DataIndex = ((vCaps[i]).NotRange).DataIndex; // Every control has an index
+            }
+        }
+
+        //HidD_FreePreparsedData(PreparsedData);
+        delete[](vCaps);
+        CloseHandle(h);
+
+        return res;
+    }
+
+    VJOYINTERFACE_API BOOL	__cdecl	ResetVJD(UINT rID)
+    {
+
+        UINT	IoCode = RESET_DEV;
+        HANDLE	h = NULL;
+        HANDLE	hIoctlEvent;
+        OVERLAPPED OverLapped = { 0 };
+        ULONG	bytes = 0;
+
+        // Handle to device
+        if (rID)
+            h = Get_h(rID);
+        else
+            h = GetGenControlHandle();
+
+        // Preparing
+        hIoctlEvent = CreateEvent(NULL, TRUE, TRUE, NULL);
+        memset(&OverLapped, 0, sizeof(OVERLAPPED));
+        OverLapped.hEvent = hIoctlEvent;
+
+        // Sending RESET message to device
+        BOOL	res = DeviceIoControl(h, IoCode, NULL, 0, NULL, 0, &bytes, &OverLapped);
+        if (!res)
+        {
+            // The transaction was not completed.
+            // If it is just because it is pending then wait otherwise it is an error
+            DWORD err = GetLastError();
+            if (err != ERROR_IO_PENDING)
+            {
+                CloseHandle(OverLapped.hEvent);
+                return FALSE;
+            }
+            else
+            {	// Wait for write to complete
+                DWORD WaitRet = WaitForSingleObject(OverLapped.hEvent, 500);
+                if (WAIT_OBJECT_0 != WaitRet)
+                {
+                    CloseHandle(OverLapped.hEvent);
+                    return FALSE;
+                }
+            }
+        }
+        CloseHandle(OverLapped.hEvent);
+        return TRUE;
+    }
+
+
+    /*
+    Test if a given device supports a specific FFB Effect
+    Indicate device by Device ID
+    Indicate effect by its usage
+    If Device supports the FFB effect then return TRUE
+    Else return FALSE
+    */
+    VJOYINTERFACE_API BOOL	__cdecl		IsDeviceFfbEffect(UINT rID, UINT Effect)
+    {
+        NTSTATUS stat = HIDP_STATUS_SUCCESS;
+        PHIDP_PREPARSED_DATA PreparsedData = NULL;
+        HIDP_CAPS Capabilities;
+
+        // Get the Value Capabilities of a given axis in a given device
+        HANDLE h = INVALID_HANDLE_VALUE;
+        BOOL ok = Get_PreparsedData(rID, &PreparsedData);
+
+        if (!ok)
+        {
+            //HidD_FreePreparsedData(PreparsedData);
+            CloseHandle(h);
+            return FALSE;
+        }
+
+        // returns a top-level collection's HIDP_CAPS structure.
+        stat = HidP_GetCaps(PreparsedData, &Capabilities);
+        if (stat != HIDP_STATUS_SUCCESS)
+        {
+            //HidD_FreePreparsedData(PreparsedData);
+            CloseHandle(h);
+            return FALSE;
+        }
+
+        // Get output buttons
+        USHORT nb_bu;
+        USHORT nb = Capabilities.NumberOutputButtonCaps;
+        if (nb < 4)
+            return FALSE;
+
+
+        HIDP_BUTTON_CAPS *	bCaps = new HIDP_BUTTON_CAPS[nb];
+        if (!bCaps)
+            return FALSE;
+        SecureZeroMemory(bCaps, sizeof(HIDP_BUTTON_CAPS)*nb);
+        nb_bu = nb;
+        stat = HidP_GetButtonCaps(HidP_Output, bCaps, &nb, PreparsedData);
+        if (FAILED(stat))
+            return FALSE;
+
+        if (nb > nb_bu)
+            return FALSE;
+
+        BOOL Out = FALSE;
+
+        if (nb < 1)
+            return FALSE;
+
+        if (stat == HIDP_STATUS_SUCCESS)
+        {
+            for (int i = 0; i < nb; i++) // Loop on all values
+                if ((bCaps[i].ReportID == (HID_ID_EFFREP + 0x10 * rID))     //    HID_ID_EFFREP + 0x10 * TLID	(This is for Device #1)
+                    && (bCaps[i].UsagePage == 0x0F) //    Usage Page Physical Interface
+                    && (bCaps[i].LinkUsage == 0x25) //    Usage Effect Type
+                    && (bCaps[i].NotRange.Usage == Effect) 	//    Usage Effect Type
+                    )
+                {
+                    Out = TRUE;
+                    break;
+                }
+        }
+
+
+        //HidD_FreePreparsedData(PreparsedData);
+        delete[](bCaps);
+        CloseHandle(h);
+        return Out;
+    }
+
+    VJOYINTERFACE_API BOOL		__cdecl vJoyEnabled(void)
+    {
+        // Returns true if  VJD #0 is confugured
+        // which means that the Raw PDO exists
+        DWORD error = 0;
+        int Size;
+
+        if (GetDeviceNameSpace(NULL, &Size, FALSE, &error))
+            return true;
+        return false;
+
+    }
+
+    VJOYINTERFACE_API BOOL	__cdecl	vJoyFfbCap(BOOL * Supported)
+    {
+        int nbytes = 10;
+        BYTE buffer[10] = { 0 };
+        BYTE * buf = buffer;
+
+        if (!Supported)
+            return FALSE;
+
+        bool ok = GetDrvStat(&nbytes, buf);
+        if (!ok)
+            return FALSE;
+
+        *Supported = buffer[0] & 0x01;
+        return (TRUE);
+    }
+
+    VJOYINTERFACE_API BOOL	__cdecl	GetNumberExistingVJD(int * n)
+    {
+        int nbytes = 10;
+        BYTE buffer[10] = { 0 };
+        BYTE * buf = buffer;
+
+        if (!n)
+            return FALSE;
+
+        bool ok = GetDrvStat(&nbytes, buf);
+        if (!ok || nbytes < 3)
+            return FALSE;
+
+        *n = buffer[2];
+        return (TRUE);
+    }
+
+
+    VJOYINTERFACE_API BOOL	__cdecl	GetvJoyMaxDevices(int * n)
+    {
+        int nbytes = 10;
+        BYTE buffer[10] = { 0 };
+        BYTE * buf = buffer;
+
+        if (!n)
+            return FALSE;
+
+        bool ok = GetDrvStat(&nbytes, buf);
+        if (!ok || nbytes < 2)
+            return FALSE;
+
+        *n = buffer[1];
+        return (TRUE);
+    }
+
+    VJOYINTERFACE_API BOOL __cdecl IsDeviceFfb(UINT rID)
+    {
+        NTSTATUS stat = HIDP_STATUS_SUCCESS;
+        PHIDP_PREPARSED_DATA PreparsedData = NULL;
+        HIDP_CAPS Capabilities;
+
+        // Get the Value Capabilities of a given axis in a given device
+        HANDLE h = INVALID_HANDLE_VALUE;
+        BOOL ok = Get_PreparsedData(rID, &PreparsedData);
+
+        if (!ok)
+        {
+            //HidD_FreePreparsedData(PreparsedData);
+            CloseHandle(h);
+            return FALSE;
+        }
+
+        // returns a top-level collection's HIDP_CAPS structure.
+        stat = HidP_GetCaps(PreparsedData, &Capabilities);
+        if (stat != HIDP_STATUS_SUCCESS)
+        {
+            //HidD_FreePreparsedData(PreparsedData);
+            CloseHandle(h);
+            return FALSE;
+        }
+
+        // Get data related to output values
+        ULONG n = Capabilities.NumberLinkCollectionNodes;
+        if (n<1)
+        {
+            CloseHandle(h);
+            //HidD_FreePreparsedData(PreparsedData);
+            return FALSE;
+        }
+
+        // Get array of of link collections
+        PHIDP_LINK_COLLECTION_NODE vLinks = new   HIDP_LINK_COLLECTION_NODE[1 + n];
+        stat = HidP_GetLinkCollectionNodes(vLinks, &n, PreparsedData);
+        if (FAILED(stat))
+            return FALSE;
+
+        // Loop on every link
+        BOOL Out = FALSE;
+        for (UINT cnt = 0; cnt < n; cnt++)
+        {
+            HIDP_LINK_COLLECTION_NODE Link = vLinks[cnt];
+
+            // This collection is:
+            //  Usage Set Effect Report(0x21),
+            //  Usage Page Physical Interface (0x0F),
+            //	Type= Output (2)
+            if (Link.LinkUsage == 0x21 && Link.LinkUsagePage == 0xf && Link.CollectionType == 2)
+            {
+                // Found
+                Out = TRUE;
+                break;
+            }
+        }
+
+        // Cleanuo & Exit
+        //HidD_FreePreparsedData(PreparsedData);
+        delete[](vLinks);
+        CloseHandle(h);
+        return Out;
+
+    }
 
 } // extern "C"
 
@@ -1015,21 +1010,21 @@ int		GetDeviceIndexById(USHORT VendorId, USHORT ProductId, int BaseIndex)
     HIDD_ATTRIBUTES Attributes;
     int iFound=-1;
     ZeroMemory(&Attributes, sizeof(HIDD_ATTRIBUTES));
-	Attributes.Size = sizeof(HIDD_ATTRIBUTES);
+    Attributes.Size = sizeof(HIDD_ATTRIBUTES);
 
-	while (h = GetHandleByIndex(i++))
-	{
-		if (h == INVALID_HANDLE_VALUE)
-			continue;
-		BOOL gotit = HidD_GetAttributes(h, &Attributes);
-		CloseHandle(h);
-		if (gotit == TRUE)
-			if ((Attributes.VendorID == VendorId) && (Attributes.ProductID == ProductId) && (iFound == -1))
-			    iFound = i - 1;
-	}
+    while (h = GetHandleByIndex(i++))
+    {
+        if (h == INVALID_HANDLE_VALUE)
+            continue;
+        BOOL gotit = HidD_GetAttributes(h, &Attributes);
+        CloseHandle(h);
+        if (gotit == TRUE)
+            if ((Attributes.VendorID == VendorId) && (Attributes.ProductID == ProductId) && (iFound == -1))
+                iFound = i - 1;
+    }
 
-	//CloseHandle(h);
-	return iFound;
+    //CloseHandle(h);
+    return iFound;
 }
 
 int		GetDeviceIndexByReportId(USHORT VendorId, USHORT ProductId, BYTE ReportId)
@@ -1164,7 +1159,7 @@ int		GetvJoyReportId(int Index)
     {
         nButtons += ((bCaps[0]).Range).UsageMax - ((bCaps[0]).Range).UsageMin + 1;
         ButtonBaseIndex = ((bCaps[0]).Range).DataIndexMin;
-		rID = bCaps[0].ReportID;
+        rID = bCaps[0].ReportID;
     }
 
     //HidD_FreePreparsedData(PreparsedData);
@@ -1268,16 +1263,16 @@ BOOL	GetDeviceNameSpace(char ** NameSpace, int * Size, BOOL Refresh, DWORD *erro
             &deviceInterfaceData,
             deviceInterfaceDetailData,
             requiredLength,
-			NULL,
-			NULL))
-		{
-			if (error)
-				*error = GetLastError();
+            NULL,
+            NULL))
+        {
+            if (error)
+                *error = GetLastError();
 
-			SetupDiDestroyDeviceInfoList(hardwareDeviceInfo);
-			LocalFree(deviceInterfaceDetailData);
-			return FALSE; // INVALID_HANDLE_VALUE;
-		}
+            SetupDiDestroyDeviceInfoList(hardwareDeviceInfo);
+            LocalFree(deviceInterfaceDetailData);
+            return FALSE; // INVALID_HANDLE_VALUE;
+        }
 
         // Now we have the device path of one interface
 
@@ -1294,8 +1289,8 @@ BOOL	GetDeviceNameSpace(char ** NameSpace, int * Size, BOOL Refresh, DWORD *erro
         {
             if (NameSpace)
                 *NameSpace = StatNS;
-			if (Size)
-				*Size = DestSize;
+            if (Size)
+                *Size = DestSize;
             return TRUE;
         }
         else
@@ -1336,9 +1331,9 @@ HANDLE	OpenDeviceInterface(UINT iInterFace, DWORD *error)
     BOOL ok = GetDeviceNameSpace(&NameSpace, &Size, FALSE, error);
     if (!ok)
         return 	INVALID_HANDLE_VALUE;
-	Size += wcslen(VJOY_INTERFACE);
-	Size += 4;
-	char * DevPath = new char[Size];
+    Size += wcslen(VJOY_INTERFACE);
+    Size += 4;
+    char * DevPath = new char[Size];
     CreateDevicePath(NameSpace, iInterFace, DevPath, Size);
 
 
@@ -1721,52 +1716,52 @@ BOOL	InitPosition(int Index)
     if (Index<1 || Index>16)
         return FALSE;
 
-	// Initialize
-	DEVICE_INIT_VALS data_buf;
-	size_t s = sizeof( DEVICE_INIT_VALS);
-	data_buf.cb = (UCHAR)s;
-	data_buf.id = Index;
-	return TRUE;
+    // Initialize
+    DEVICE_INIT_VALS data_buf;
+    size_t s = sizeof( DEVICE_INIT_VALS);
+    data_buf.cb = (UCHAR)s;
+    data_buf.id = Index;
+    return TRUE;
 
 
-	// Calculate default position
-	CalcInitValue(Index, &data_buf);
+    // Calculate default position
+    CalcInitValue(Index, &data_buf);
 
-	BOOL GoodPos = GetDevPosition(Index, &vJoyDevices[Index].position);
+    BOOL GoodPos = GetDevPosition(Index, &vJoyDevices[Index].position);
 
 
-	//  Copy default position to position structure
+    //  Copy default position to position structure
     vJoyDevices[Index].position.wAxisX = data_buf.InitValAxis[0] * 0x7FFF / 100 + 1 ;
     vJoyDevices[Index].position.wAxisY = data_buf.InitValAxis[1] * 0x7FFF / 100 + 1;
     vJoyDevices[Index].position.wAxisZ = data_buf.InitValAxis[2] * 0x7FFF / 100 + 1;
     vJoyDevices[Index].position.wThrottle = vJoyDevices[Index].position.wRudder = vJoyDevices[Index].position.wAileron = 0;
     vJoyDevices[Index].position.wAxisXRot = data_buf.InitValAxis[3] * 0x7FFF / 100 + 1;
-	vJoyDevices[Index].position.wAxisYRot = data_buf.InitValAxis[4] * 0x7FFF / 100 + 1;
-	vJoyDevices[Index].position.wAxisZRot = data_buf.InitValAxis[5] * 0x7FFF / 100 + 1;
+    vJoyDevices[Index].position.wAxisYRot = data_buf.InitValAxis[4] * 0x7FFF / 100 + 1;
+    vJoyDevices[Index].position.wAxisZRot = data_buf.InitValAxis[5] * 0x7FFF / 100 + 1;
     vJoyDevices[Index].position.wSlider = data_buf.InitValAxis[6] * 0x7FFF / 100 + 1;
-	vJoyDevices[Index].position.wDial = data_buf.InitValAxis[7] * 0x7FFF / 100 + 1;
+    vJoyDevices[Index].position.wDial = data_buf.InitValAxis[7] * 0x7FFF / 100 + 1;
     vJoyDevices[Index].position.wAxisVX = vJoyDevices[Index].position.wAxisVY = vJoyDevices[Index].position.wAxisVZ = 0;
     vJoyDevices[Index].position.wAxisVBRX = vJoyDevices[Index].position.wAxisVBRY = vJoyDevices[Index].position.wAxisVBRZ = 0;
 
-	if (data_buf.InitValPov[0] == 0xFF)
-		vJoyDevices[Index].position.bHats = (DWORD)-1;
-	else
-		vJoyDevices[Index].position.bHats = data_buf.InitValPov[0] * 0x8C9F / 100 + 1;
+    if (data_buf.InitValPov[0] == 0xFF)
+        vJoyDevices[Index].position.bHats = (DWORD)-1;
+    else
+        vJoyDevices[Index].position.bHats = data_buf.InitValPov[0] * 0x8C9F / 100 + 1;
 
-	if (data_buf.InitValPov[1] == 0xFF)
-		vJoyDevices[Index].position.bHatsEx1 = (DWORD)-1;
-	else
-		vJoyDevices[Index].position.bHatsEx1 = data_buf.InitValPov[1] * 0x8C9F / 100 + 1;
+    if (data_buf.InitValPov[1] == 0xFF)
+        vJoyDevices[Index].position.bHatsEx1 = (DWORD)-1;
+    else
+        vJoyDevices[Index].position.bHatsEx1 = data_buf.InitValPov[1] * 0x8C9F / 100 + 1;
 
-	if (data_buf.InitValPov[2] == 0xFF)
-		vJoyDevices[Index].position.bHatsEx2 = (DWORD)-1;
-	else
-		vJoyDevices[Index].position.bHatsEx2 = data_buf.InitValPov[2] * 0x8C9F / 100 + 1;
+    if (data_buf.InitValPov[2] == 0xFF)
+        vJoyDevices[Index].position.bHatsEx2 = (DWORD)-1;
+    else
+        vJoyDevices[Index].position.bHatsEx2 = data_buf.InitValPov[2] * 0x8C9F / 100 + 1;
 
-	if (data_buf.InitValPov[3] == 0xFF)
-		vJoyDevices[Index].position.bHatsEx3 = (DWORD)-1;
-	else
-		vJoyDevices[Index].position.bHatsEx3 = data_buf.InitValPov[3] * 0x8C9F / 100 + 1;
+    if (data_buf.InitValPov[3] == 0xFF)
+        vJoyDevices[Index].position.bHatsEx3 = (DWORD)-1;
+    else
+        vJoyDevices[Index].position.bHatsEx3 = data_buf.InitValPov[3] * 0x8C9F / 100 + 1;
 
     vJoyDevices[Index].position.lButtons = ((DWORD *)(data_buf.ButtonMask))[0];
     vJoyDevices[Index].position.lButtonsEx1 = ((DWORD *)(data_buf.ButtonMask))[1];
@@ -1778,130 +1773,130 @@ BOOL	InitPosition(int Index)
 
 void	CalcInitValue(USHORT id, struct DEVICE_INIT_VALS * data_buf)
 {
-	UINT mask_device=0, mask_master=0;
-	DEVICE_INIT_VALS  init_master;
-	UCHAR InitValAxis[8] = { 50, 50, 50, 0, 0, 0, 0, 0 };
-	UCHAR InitValPov[4] = { (UCHAR)-1, (UCHAR)-1, (UCHAR)-1, (UCHAR)-1 };
-	UCHAR ButtonMask[16] = { 0 };
-	int i, j;
+    UINT mask_device=0, mask_master=0;
+    DEVICE_INIT_VALS  init_master;
+    UCHAR InitValAxis[8] = { 50, 50, 50, 0, 0, 0, 0, 0 };
+    UCHAR InitValPov[4] = { (UCHAR)-1, (UCHAR)-1, (UCHAR)-1, (UCHAR)-1 };
+    UCHAR ButtonMask[16] = { 0 };
+    int i, j;
 
-	// If ID is NOT 0 then call GetInitValueFromRegistry() and save output buffer in data_buf
-	if (id != 0)
-	{
-		// Get the data from the registry - if it covers all controls the return
-		mask_device = GetInitValueFromRegistry(id, data_buf);
-		if (mask_device == 0x1FFF) // all data taken from registry?
-			return;
-	}
+    // If ID is NOT 0 then call GetInitValueFromRegistry() and save output buffer in data_buf
+    if (id != 0)
+    {
+        // Get the data from the registry - if it covers all controls the return
+        mask_device = GetInitValueFromRegistry(id, data_buf);
+        if (mask_device == 0x1FFF) // all data taken from registry?
+            return;
+    }
 
-	// Getting the missing data from the master device
-	init_master.cb = sizeof(DEVICE_INIT_VALS);
-	init_master.id = id;
-	mask_master = GetInitValueFromRegistry(0, &init_master);
-	int nAxes, nPovs, offset;
+    // Getting the missing data from the master device
+    init_master.cb = sizeof(DEVICE_INIT_VALS);
+    init_master.id = id;
+    mask_master = GetInitValueFromRegistry(0, &init_master);
+    int nAxes, nPovs, offset;
 
-	// Merge Axes
-	nAxes = (sizeof(data_buf->InitValAxis) / sizeof(data_buf->InitValAxis[0]));
-	nPovs = (sizeof(data_buf->InitValPov) / sizeof(data_buf->InitValPov[0]));
-	for ( i = 0; i <nAxes; i++)
-	{
-		offset = nAxes + nPovs - i;
-		if (!(mask_device & (1 << offset)))
-		{
-			if (mask_master & (1 << offset))
-				data_buf->InitValAxis[i] = init_master.InitValAxis[i];
-			else
-				data_buf->InitValAxis[i] = InitValAxis[i];
-		};
-	};
+    // Merge Axes
+    nAxes = (sizeof(data_buf->InitValAxis) / sizeof(data_buf->InitValAxis[0]));
+    nPovs = (sizeof(data_buf->InitValPov) / sizeof(data_buf->InitValPov[0]));
+    for ( i = 0; i <nAxes; i++)
+    {
+        offset = nAxes + nPovs - i;
+        if (!(mask_device & (1 << offset)))
+        {
+            if (mask_master & (1 << offset))
+                data_buf->InitValAxis[i] = init_master.InitValAxis[i];
+            else
+                data_buf->InitValAxis[i] = InitValAxis[i];
+        };
+    };
 
-	// Merge POVs
-	for ( j = 0; j < nPovs; i++, j++)
-	{
-		offset = nPovs - i;
-		if (!(mask_device & (1 << offset)))
-		{
-			if (mask_master & (1 << offset))
-				data_buf->InitValPov[j] = init_master.InitValPov[j];
-			else
-				data_buf->InitValPov[j] = InitValPov[j];
-		};
-	};
+    // Merge POVs
+    for ( j = 0; j < nPovs; i++, j++)
+    {
+        offset = nPovs - i;
+        if (!(mask_device & (1 << offset)))
+        {
+            if (mask_master & (1 << offset))
+                data_buf->InitValPov[j] = init_master.InitValPov[j];
+            else
+                data_buf->InitValPov[j] = InitValPov[j];
+        };
+    };
 
-	// Buttons
-	if (!(mask_device & 1))
-	{
-		if (mask_master & 1)
-			for (int k = 0; k < (sizeof(data_buf->ButtonMask) / sizeof(data_buf->ButtonMask[0])); k++)
-				data_buf->ButtonMask[k] = init_master.ButtonMask[k];
-		else
-			for (int k = 0; k < (sizeof(data_buf->ButtonMask) / sizeof(data_buf->ButtonMask[0])); k++)
-				data_buf->ButtonMask[k] = ButtonMask[k];
-	};
+    // Buttons
+    if (!(mask_device & 1))
+    {
+        if (mask_master & 1)
+            for (int k = 0; k < (sizeof(data_buf->ButtonMask) / sizeof(data_buf->ButtonMask[0])); k++)
+                data_buf->ButtonMask[k] = init_master.ButtonMask[k];
+        else
+            for (int k = 0; k < (sizeof(data_buf->ButtonMask) / sizeof(data_buf->ButtonMask[0])); k++)
+                data_buf->ButtonMask[k] = ButtonMask[k];
+    };
 
 
 }
 
 UINT	GetInitValueFromRegistry(USHORT id, struct DEVICE_INIT_VALS * data_buf)
 {
-	PCWSTR	Axes[] = { L"X", L"Y", L"Z", L"RX", L"RY", L"RZ", L"SL1", L"SL2" };
-	UCHAR	nAxes = 0;
-	PCWSTR	Povs[] = { L"POV1", L"POV2", L"POV3", L"POV4" };
-	UCHAR	nPovs = 0;
-	INT		nButtons = 128;
-	UINT	Mask = 0;
+    PCWSTR	Axes[] = { L"X", L"Y", L"Z", L"RX", L"RY", L"RZ", L"SL1", L"SL2" };
+    UCHAR	nAxes = 0;
+    PCWSTR	Povs[] = { L"POV1", L"POV2", L"POV3", L"POV4" };
+    UCHAR	nPovs = 0;
+    INT		nButtons = 128;
+    UINT	Mask = 0;
 
 
-	/* Check that buffer size is sufficient */
-	nAxes = sizeof(Axes) / sizeof(PCWSTR);
-	nPovs = sizeof(Povs) / sizeof(PCWSTR);
-	if (data_buf->cb < (2 + nAxes + nPovs + sizeof(nButtons) / 8))
-		return 0;
+    /* Check that buffer size is sufficient */
+    nAxes = sizeof(Axes) / sizeof(PCWSTR);
+    nPovs = sizeof(Povs) / sizeof(PCWSTR);
+    if (data_buf->cb < (2 + nAxes + nPovs + sizeof(nButtons) / 8))
+        return 0;
 
 
-	/* Calculate the registry name: "SYSTEM\\CurrentControlSet\\services\\vjoy\\Parameters\\Device**\\Init" */
-	size_t size_dev = wcslen(REG_PARAM_DEV); // Size of "SYSTEM\\CurrentControlSet\\services\\vjoy\\Parameters\\Device"
-	size_t size_ini = wcslen(REG_INIT); // Size of "Init"
-	size_t s = size_ini + size_dev + 10; // Size of entire buffer including slashes, ID etc
-	WCHAR * strInit = new WCHAR[s];
-	int actual_size = swprintf_s(strInit, s,L"%s%02u\\%s\0",REG_PARAM_DEV, id, REG_INIT);
-	if (actual_size < 0 || (UINT)actual_size >= s)
-		return 0; // Error: Creation of registry string failed
+    /* Calculate the registry name: "SYSTEM\\CurrentControlSet\\services\\vjoy\\Parameters\\Device**\\Init" */
+    size_t size_dev = wcslen(REG_PARAM_DEV); // Size of "SYSTEM\\CurrentControlSet\\services\\vjoy\\Parameters\\Device"
+    size_t size_ini = wcslen(REG_INIT); // Size of "Init"
+    size_t s = size_ini + size_dev + 10; // Size of entire buffer including slashes, ID etc
+    WCHAR * strInit = new WCHAR[s];
+    int actual_size = swprintf_s(strInit, s,L"%s%02u\\%s\0",REG_PARAM_DEV, id, REG_INIT);
+    if (actual_size < 0 || (UINT)actual_size >= s)
+        return 0; // Error: Creation of registry string failed
 
-	/* Open registry - Most of the path should exist */
-	HKEY hParams;
-	LONG RegRes = RegOpenKeyExW(HKEY_LOCAL_MACHINE, strInit, 0, KEY_READ, &hParams);
-	if (RegRes != ERROR_SUCCESS)
-		return 0;	// Error: Could not open 
+    /* Open registry - Most of the path should exist */
+    HKEY hParams;
+    LONG RegRes = RegOpenKeyExW(HKEY_LOCAL_MACHINE, strInit, 0, KEY_READ, &hParams);
+    if (RegRes != ERROR_SUCCESS)
+        return 0;	// Error: Could not open 
 
-					/* Analyze axes */
-	DWORD OutSize = sizeof(UCHAR);
-	for (int iAxis = 0; iAxis < nAxes; iAxis++)
-	{
-		RegRes = RegGetValueW(hParams, NULL, Axes[iAxis], RRF_RT_REG_BINARY, NULL, &(data_buf->InitValAxis[iAxis]), &OutSize);
-		if (RegRes == ERROR_SUCCESS)
-			Mask |= 0x01;
-		Mask = Mask << 1;
-	};
+                    /* Analyze axes */
+    DWORD OutSize = sizeof(UCHAR);
+    for (int iAxis = 0; iAxis < nAxes; iAxis++)
+    {
+        RegRes = RegGetValueW(hParams, NULL, Axes[iAxis], RRF_RT_REG_BINARY, NULL, &(data_buf->InitValAxis[iAxis]), &OutSize);
+        if (RegRes == ERROR_SUCCESS)
+            Mask |= 0x01;
+        Mask = Mask << 1;
+    };
 
-	/* Analyze POVs */
-	for (int iPov = 0; iPov < nPovs; iPov++)
-	{
-		RegRes = RegGetValueW(hParams, NULL, Povs[iPov], RRF_RT_REG_BINARY, NULL, &(data_buf->InitValPov[iPov]), &OutSize);
-		if (RegRes == ERROR_SUCCESS)
-			Mask |= 0x01;
-		Mask = Mask << 1;
-	};
+    /* Analyze POVs */
+    for (int iPov = 0; iPov < nPovs; iPov++)
+    {
+        RegRes = RegGetValueW(hParams, NULL, Povs[iPov], RRF_RT_REG_BINARY, NULL, &(data_buf->InitValPov[iPov]), &OutSize);
+        if (RegRes == ERROR_SUCCESS)
+            Mask |= 0x01;
+        Mask = Mask << 1;
+    };
 
-	/* Analyze buttons */
-	OutSize = 16*sizeof(UCHAR);
-	RegRes = RegGetValueW(hParams, NULL, BTN_INIT, RRF_RT_REG_BINARY, NULL, &(data_buf->ButtonMask), &OutSize);
-	if (RegRes == ERROR_SUCCESS)
-			Mask |= 0x01;
+    /* Analyze buttons */
+    OutSize = 16*sizeof(UCHAR);
+    RegRes = RegGetValueW(hParams, NULL, BTN_INIT, RRF_RT_REG_BINARY, NULL, &(data_buf->ButtonMask), &OutSize);
+    if (RegRes == ERROR_SUCCESS)
+            Mask |= 0x01;
 
-	RegCloseKey(hParams);
+    RegCloseKey(hParams);
 
-	return Mask;
+    return Mask;
 }
 
 void	SavePosition(UINT rID, PVOID pData)
@@ -1918,59 +1913,59 @@ void	SavePosition(UINT rID, PVOID pData)
 
 BOOL GetDevPosition(BYTE id, PJOYSTICK_POSITION_V2 pPosition)
 /* 
-	This function gets the joystick position of a given device by device ID
-	Returns TRUE if pPosition points to a valid position data.
-	Otherwise returns FALSE
-	Function does not change values in structure vJoyDevices[id].position
+    This function gets the joystick position of a given device by device ID
+    Returns TRUE if pPosition points to a valid position data.
+    Otherwise returns FALSE
+    Function does not change values in structure vJoyDevices[id].position
 */
 {
-	UINT	IoCode = GET_POSITIONS;
-	UINT	IoSize = sizeof(JOYSTICK_POSITION_V2);
-	ULONG	bytes;
-	HANDLE	hIoctlEvent;
-	OVERLAPPED OverLapped = { 0 };
+    UINT	IoCode = GET_POSITIONS;
+    UINT	IoSize = sizeof(JOYSTICK_POSITION_V2);
+    ULONG	bytes;
+    HANDLE	hIoctlEvent;
+    OVERLAPPED OverLapped = { 0 };
 
-	// Preparing
-	hIoctlEvent = CreateEvent(NULL, TRUE, TRUE, NULL);
-	memset(&OverLapped, 0, sizeof(OVERLAPPED));
-	OverLapped.hEvent = hIoctlEvent;
+    // Preparing
+    hIoctlEvent = CreateEvent(NULL, TRUE, TRUE, NULL);
+    memset(&OverLapped, 0, sizeof(OVERLAPPED));
+    OverLapped.hEvent = hIoctlEvent;
 
-	// Get joystick position structure from vJoy device
-	BOOL res = DeviceIoControl(Get_h(id), IoCode, NULL, 0, (PVOID)pPosition, IoSize, &bytes, &OverLapped);
-	// immediate Return
-	if (res)
-	{
-		CloseHandle(OverLapped.hEvent);
-		if (bytes)
-			return TRUE;
-		else
-			return FALSE;
-	}
+    // Get joystick position structure from vJoy device
+    BOOL res = DeviceIoControl(Get_h(id), IoCode, NULL, 0, (PVOID)pPosition, IoSize, &bytes, &OverLapped);
+    // immediate Return
+    if (res)
+    {
+        CloseHandle(OverLapped.hEvent);
+        if (bytes)
+            return TRUE;
+        else
+            return FALSE;
+    }
 
-	// Delayed/Error
-	else
-	{
-		// Error getting the data
-		DWORD err = GetLastError();
-		if (err != ERROR_IO_PENDING)
-		{
-			CloseHandle(OverLapped.hEvent);
-			return FALSE;
-		}
+    // Delayed/Error
+    else
+    {
+        // Error getting the data
+        DWORD err = GetLastError();
+        if (err != ERROR_IO_PENDING)
+        {
+            CloseHandle(OverLapped.hEvent);
+            return FALSE;
+        }
 
-		// Wait until data ready
-		DWORD nBytesTranss = 0;
-		BOOL gotdata = GetOverlappedResult(Get_h(id), &OverLapped, &nBytesTranss, TRUE);
-		CloseHandle(OverLapped.hEvent);
+        // Wait until data ready
+        DWORD nBytesTranss = 0;
+        BOOL gotdata = GetOverlappedResult(Get_h(id), &OverLapped, &nBytesTranss, TRUE);
+        CloseHandle(OverLapped.hEvent);
 
-		// Data received and it is not empty
-		if (gotdata && nBytesTranss)
-			return TRUE;
-		else
-			return FALSE;
-	}
+        // Data received and it is not empty
+        if (gotdata && nBytesTranss)
+            return TRUE;
+        else
+            return FALSE;
+    }
 
-	return FALSE;
+    return FALSE;
 }
 
 
@@ -2106,7 +2101,7 @@ int	DbgGetCaps(void)
             Link.LinkUsagePage,
             0,
             0x25,
-			val_caps_local,
+            val_caps_local,
             &n_val_caps_local,
             PreparsedData
             );
@@ -2145,16 +2140,16 @@ int	DbgGetCaps(void)
     }
 
     // Get output buttons
-	USHORT nb_bu;
+    USHORT nb_bu;
     USHORT nb = Capabilities.NumberOutputButtonCaps;
     HIDP_BUTTON_CAPS 	* bCaps = new HIDP_BUTTON_CAPS[nb];
     SecureZeroMemory(bCaps, sizeof(HIDP_BUTTON_CAPS)*nb);
-	nb_bu = nb;
+    nb_bu = nb;
     stat = HidP_GetButtonCaps(HidP_Output, bCaps, &nb, PreparsedData);
-	if (FAILED(stat))
-		return NO_CAPS;
-	if (nb>nb_bu)
-		return NO_CAPS;
+    if (FAILED(stat))
+        return NO_CAPS;
+    if (nb>nb_bu)
+        return NO_CAPS;
     bool Custom_Force = false;
 
     if (stat == HIDP_STATUS_SUCCESS)
@@ -2427,7 +2422,7 @@ BOOL vJoyDeviceEntry(int rID)
     if (!out.second)
         return FALSE;
         
-	return TRUE;
+    return TRUE;
 }
 
 // Remove an existing map entry
@@ -2566,22 +2561,22 @@ void Set_h(int rID, HANDLE h)
 // Call only after Set_h
 void Sync_Position(int rID)
 {
-	// If doesn't exist - return
-	if (vJoyDevices.find(rID) == vJoyDevices.end())
-		return;
+    // If doesn't exist - return
+    if (vJoyDevices.find(rID) == vJoyDevices.end())
+        return;
 
-	// if handle is invalid - return
-	if (vJoyDevices[rID].h == INVALID_HANDLE_VALUE)
-		return;
+    // if handle is invalid - return
+    if (vJoyDevices[rID].h == INVALID_HANDLE_VALUE)
+        return;
 
-	// Get the current device position from the device
-	JOYSTICK_POSITION_V2 Position;
-	BOOL bRes = GetDevPosition(rID, &Position);
-	if (!bRes)
-		return;
+    // Get the current device position from the device
+    JOYSTICK_POSITION_V2 Position;
+    BOOL bRes = GetDevPosition(rID, &Position);
+    if (!bRes)
+        return;
 
-	// Update the container
-	SavePosition(rID, PVOID(&Position));
+    // Update the container
+    SavePosition(rID, PVOID(&Position));
 }
 //Get_h() :
 //If entry exists : Returns the  handle to the device

@@ -56,7 +56,7 @@ Settings settings;
 JetSeat *jetseat;
 Fan *fan;
 
-float firc[] = { 0.0135009f, 0.0903209f, 0.2332305f, 0.3240389f, 0.2607993f, 0.0777116f };
+float firc[] = { 0.0777116f, 0.2607993f, 0.3240389f, 0.2332305f, 0.0903209f, 0.0135009f };
 
 char car[MAX_CAR_NAME];
 

@@ -48,7 +48,7 @@ enum VjdStat  /* Declares an enumeration data type */
 #define PFFB_EFF_CONST 	PFFB_EFF_REPORT
 #define Ffb_h_Eff_Const Ffb_h_Eff_Report
 
-#define FFB_DATA_MAX_SIZE 64
+#define FFB_DATA_MAX_SIZE 128
 
 // Device Axis/POVs/Buttons
 struct DEVCTRLS {

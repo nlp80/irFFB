@@ -3,6 +3,7 @@
 #include "stdafx.h"
 #include "public.h"
 #include "vjoyinterface.h"
+#include "irFFB.h"
 
 #include <map>
 
@@ -109,8 +110,6 @@ extern "C" {
     {
         // Loop on read FFB data from vJoy
 
-        UINT	IoCode = GET_FFB_DATA;
-        UINT	IoSize = FFB_DATA_MAX_SIZE + 8;
         ULONG	bytes;
         BOOL	gotdata;
         DWORD	nBytesTranss = 1;
@@ -132,10 +131,9 @@ extern "C" {
             // This is an async (overlapped) transaction
             memset(&FfbOverlapped, 0, sizeof(OVERLAPPED));
             FfbOverlapped.hEvent = hIoctlEvent;
-            if (DeviceIoControl(h, IoCode, NULL, 0, FfbDataPacket, IoSize, &bytes, &FfbOverlapped))
-                continue;
-            if (GetLastError() != ERROR_IO_PENDING)
-                continue;
+            if (!DeviceIoControl(h, GET_FFB_DATA, NULL, 0, FfbDataPacket, sizeof(FFB_DATA), &bytes, &FfbOverlapped))
+                if (GetLastError() != ERROR_IO_PENDING)
+                    break;
 
             // Wait until data ready
             nBytesTranss = 0;
@@ -154,6 +152,7 @@ extern "C" {
 
         }
 
+        text(L"vJoy driver error %d, vJoy FFB thread exiting", GetLastError());
         return 0;
     
     }

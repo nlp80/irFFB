@@ -86,7 +86,7 @@ void Fan::createWindow(HINSTANCE hInst) {
 
     manualWnd = slider(mainWnd, L"Manual fan speed:", 40, 234, L"0", L"100");
 
-    setManualSpeed(manualSpeed);
+    setManualSpeed((int)manualSpeed);
     ShowWindow(mainWnd, SW_SHOWNORMAL);
     UpdateWindow(mainWnd);
     enumSerialPorts();

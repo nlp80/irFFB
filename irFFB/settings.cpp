@@ -19,26 +19,26 @@ void Settings::setFfbWnd(HWND wnd) {
 }
 HWND Settings::getFfbWnd() { return ffbWnd; }
         
-void Settings::setMinWnd(HWND wnd) {
+void Settings::setMinWnd(sWins_t *wnd) {
     minWnd = wnd; 
-    SendMessage(minWnd, TBM_SETRANGE, TRUE, MAKELPARAM(0, 20));
+    SendMessage(minWnd->trackbar, TBM_SETRANGE, TRUE, MAKELPARAM(0, 20));
 }
-HWND Settings::getMinWnd() { return minWnd; }
+sWins_t *Settings::getMinWnd() { return minWnd; }
         
-void Settings::setMaxWnd(HWND wnd) { 
+void Settings::setMaxWnd(sWins_t *wnd) { 
     maxWnd = wnd;
-    SendMessage(maxWnd, TBM_SETRANGE, TRUE, MAKELPARAM(MIN_MAXFORCE, MAX_MAXFORCE));
+    SendMessage(maxWnd->trackbar, TBM_SETRANGE, TRUE, MAKELPARAM(MIN_MAXFORCE, MAX_MAXFORCE));
 }
-HWND Settings::getMaxWnd() { return maxWnd; }
+sWins_t *Settings::getMaxWnd() { return maxWnd; }
 
-void Settings::setBumpsWnd(HWND wnd) { bumpsWnd = wnd; }
-HWND Settings::getBumpsWnd() { return bumpsWnd; }
+void Settings::setBumpsWnd(sWins_t *wnd) { bumpsWnd = wnd; }
+sWins_t *Settings::getBumpsWnd() { return bumpsWnd; }
 
-void Settings::setLoadWnd(HWND wnd) { loadWnd = wnd; }
-HWND Settings::getLoadWnd() { return loadWnd; }
+void Settings::setLoadWnd(sWins_t *wnd) { loadWnd = wnd; }
+sWins_t *Settings::getLoadWnd() { return loadWnd; }
 
-void Settings::setYawWnd(HWND wnd) { yawWnd = wnd; }
-HWND Settings::getYawWnd() { return yawWnd; }
+void Settings::setYawWnd(sWins_t *wnd) { yawWnd = wnd; }
+sWins_t *Settings::getYawWnd() { return yawWnd; }
         
 void Settings::setExtraLongWnd(HWND wnd) { extraLongWnd = wnd; }
 HWND Settings::getExtraLongWnd() { return extraLongWnd; }
@@ -85,8 +85,10 @@ void Settings::setMinForce(int min) {
     if (min < 0 || min > 20)
         return;
     minForce = min * MINFORCE_MULTIPLIER;
-    SendMessage(minWnd, TBM_SETPOS, TRUE, min);
-    SendMessage(minWnd, TBM_SETPOSNOTIFY, 0, min);
+    SendMessage(minWnd->trackbar, TBM_SETPOS, TRUE, min);
+    SendMessage(minWnd->trackbar, TBM_SETPOSNOTIFY, 0, min);
+    swprintf_s(strbuf, L"Min force  [ %d ]", min);
+    SendMessage(minWnd->value, WM_SETTEXT, NULL, LPARAM(strbuf));
 }
 int Settings::getMinForce() { return minForce; }
  
@@ -94,8 +96,10 @@ void Settings::setMaxForce(int max) {
     if (max < MIN_MAXFORCE || max > MAX_MAXFORCE)
         return;
     maxForce = max;
-    SendMessage(maxWnd, TBM_SETPOS, TRUE, maxForce);
-    SendMessage(maxWnd, TBM_SETPOSNOTIFY, 0, maxForce);
+    SendMessage(maxWnd->trackbar, TBM_SETPOS, TRUE, maxForce);
+    SendMessage(maxWnd->trackbar, TBM_SETPOSNOTIFY, 0, maxForce);
+    swprintf_s(strbuf, L"Max force  [ %d Nm ]", max);
+    SendMessage(maxWnd->value, WM_SETTEXT, NULL, LPARAM(strbuf));
     scaleFactor = (float)DI_MAX / maxForce;
     irsdk_broadcastMsg(
         irsdk_BroadcastFFBCommand, irsdk_FFBCommand_MaxForce, (float)maxForce
@@ -109,8 +113,10 @@ void Settings::setBumpsFactor(int factor) {
     if (factor < 0 || factor > 100)
         return;
     bumpsFactor = pow((float)factor, 2) * BUMPSFORCE_MULTIPLIER;
-    SendMessage(bumpsWnd, TBM_SETPOS, TRUE, factor);
-    SendMessage(bumpsWnd, TBM_SETPOSNOTIFY, 0, factor);
+    SendMessage(bumpsWnd->trackbar, TBM_SETPOS, TRUE, factor);
+    SendMessage(bumpsWnd->trackbar, TBM_SETPOSNOTIFY, 0, factor);
+    swprintf_s(strbuf, L"Suspension bumps  [ %d ]", factor);
+    SendMessage(bumpsWnd->value, WM_SETTEXT, NULL, LPARAM(strbuf));
 }
 float Settings::getBumpsFactor() { return bumpsFactor; }
 
@@ -118,8 +124,10 @@ void Settings::setLoadFactor(int factor) {
     if (factor < 0 || factor > 100)
         return;
     loadFactor = pow((float)factor, 2) * LOADFORCE_MULTIPLIER;
-    SendMessage(loadWnd, TBM_SETPOS, TRUE, factor);
-    SendMessage(loadWnd, TBM_SETPOSNOTIFY, 0, factor);
+    SendMessage(loadWnd->trackbar, TBM_SETPOS, TRUE, factor);
+    SendMessage(loadWnd->trackbar, TBM_SETPOSNOTIFY, 0, factor);
+    swprintf_s(strbuf, L"Suspension load  [ %d ]", factor);
+    SendMessage(loadWnd->value, WM_SETTEXT, NULL, LPARAM(strbuf));
 }
 float Settings::getLoadFactor() { return loadFactor; }
 
@@ -127,8 +135,10 @@ void Settings::setYawFactor(int factor) {
     if (factor < 0 || factor > 100)
         return;
     yawFactor = (float)factor;
-    SendMessage(yawWnd, TBM_SETPOS, TRUE, factor);
-    SendMessage(yawWnd, TBM_SETPOSNOTIFY, 0, factor);
+    SendMessage(yawWnd->trackbar, TBM_SETPOS, TRUE, factor);
+    SendMessage(yawWnd->trackbar, TBM_SETPOSNOTIFY, 0, factor);
+    swprintf_s(strbuf, L"SoP  [ %d ]", factor);
+    SendMessage(yawWnd->value, WM_SETTEXT, NULL, LPARAM(strbuf));
 }
 float Settings::getYawFactor() { return yawFactor; }
 
@@ -407,7 +417,7 @@ void Settings::writeSettingsForCar(char *car) {
     if (!iniPresent) {
         sprintf_s(buf, "car:ffbType:minForce:maxForce:bumps:load:incrLongEff:effUse360:sop\r\n\r\n");
         tmpFile.write(buf, strlen(buf));
-        sprintf_s(buf, "ffbType     | 0 = 360, 1 = 360I, 2 = 60DF\r\n");
+        sprintf_s(buf, "ffbType     | 0 = 360, 1 = 360I, 2 = 60DF_360, 3 = 60DF_720\r\n");
         tmpFile.write(buf, strlen(buf));
         sprintf_s(buf, "minForce    | min = 0, max = 20\r\n");
         tmpFile.write(buf, strlen(buf));
@@ -446,10 +456,11 @@ MOVE:
 
 wchar_t *Settings::ffbTypeString(int type) {
     switch (type) {
-        case FFBTYPE_360HZ:         return L"360 Hz";
-        case FFBTYPE_360HZ_INTERP:  return L"360 Hz interpolated";
-        case FFBTYPE_DIRECT_FILTER: return L"60 Hz direct filtered";
-        default:                    return L"Unknown FFB type";
+        case FFBTYPE_360HZ:             return L"360 Hz";
+        case FFBTYPE_360HZ_INTERP:      return L"360 Hz interpolated";
+        case FFBTYPE_DIRECT_FILTER:     return L"60 Hz direct filtered 360";
+        case FFBTYPE_DIRECT_FILTER_720: return L"60 Hz direct filtered 720";
+        default:                        return L"Unknown FFB type";
     }
 }
 

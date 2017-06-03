@@ -117,7 +117,7 @@ ATOM JetSeat::registerClass(HINSTANCE hInstance) {
 }
 
 void JetSeat::effectControls(
-    wchar_t *effect, int x, int y, HWND *placeWnd, HWND *gainWnd, HINSTANCE hInst
+    wchar_t *effect, int x, int y, HWND *placeWnd, sWins_t *gainWnd, HINSTANCE hInst
 ) {
 
     wchar_t gain[64];
@@ -145,13 +145,13 @@ void JetSeat::effectControls(
 
     }
 
-    CreateWindowW(
+    gainWnd->value = CreateWindowW(
         L"STATIC", gain,
         WS_CHILD | WS_VISIBLE,
         x + 256, y, 200, 20, mainWnd, NULL, hInst, NULL
     );
 
-    *gainWnd = CreateWindowEx(
+    gainWnd->trackbar = CreateWindowEx(
         0, TRACKBAR_CLASS, gain,
         WS_CHILD | WS_VISIBLE | TBS_AUTOTICKS | TBS_TOOLTIPS | TBS_TRANSPARENTBKGND,
         x + 256, y + 40, 320, 30,
@@ -164,7 +164,7 @@ void JetSeat::effectControls(
         0, 0, 20, 20, mainWnd, NULL, hInst, NULL
     );
 
-    SendMessage(*gainWnd, TBM_SETBUDDY, (WPARAM)TRUE, (LPARAM)buddyLeft);
+    SendMessage(gainWnd->trackbar, TBM_SETBUDDY, (WPARAM)TRUE, (LPARAM)buddyLeft);
 
     HWND buddyRight = CreateWindowEx(
         0, L"STATIC", L"100",
@@ -172,7 +172,7 @@ void JetSeat::effectControls(
         0, 0, 30, 20, mainWnd, NULL, hInst, NULL
     );
 
-    SendMessage(*gainWnd, TBM_SETBUDDY, (WPARAM)FALSE, (LPARAM)buddyRight);
+    SendMessage(gainWnd->trackbar, TBM_SETBUDDY, (WPARAM)FALSE, (LPARAM)buddyRight);
 
 }
 
@@ -240,13 +240,13 @@ LRESULT CALLBACK JetSeat::wndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM
     break;
 
     case WM_HSCROLL: {
-        if ((HWND)lParam == instance->gearGainWnd)
+        if ((HWND)lParam == instance->gearGainWnd.trackbar)
             instance->gearGain = (float)(SendMessage((HWND)lParam, TBM_GETPOS, 0, 0));
-        else if ((HWND)lParam == instance->bumpsGainWnd)
+        else if ((HWND)lParam == instance->bumpsGainWnd.trackbar)
             instance->bumpsGain = (float)(SendMessage((HWND)lParam, TBM_GETPOS, 0, 0));
-        else if ((HWND)lParam == instance->engineGainWnd)
+        else if ((HWND)lParam == instance->engineGainWnd.trackbar)
             instance->engineGain = (float)(SendMessage((HWND)lParam, TBM_GETPOS, 0, 0));
-        else if ((HWND)lParam == instance->yawGainWnd)
+        else if ((HWND)lParam == instance->yawGainWnd.trackbar)
             instance->yawGain = (float)(SendMessage((HWND)lParam, TBM_GETPOS, 0, 0));
     }
     break;
@@ -315,23 +315,31 @@ int JetSeat::getEnginePlace() {
 
 void JetSeat::setGearGain(float gain) {
     gearGain = gain;
-    SendMessage(gearGainWnd, TBM_SETPOS, TRUE, (int)gain);
-    SendMessage(gearGainWnd, TBM_SETPOSNOTIFY, 0, (int)gain);
+    SendMessage(gearGainWnd.trackbar, TBM_SETPOS, TRUE, (int)gain);
+    SendMessage(gearGainWnd.trackbar, TBM_SETPOSNOTIFY, 0, (int)gain);
+    swprintf_s(strbuf, L"Gear shift gain  [ %d ]", (int)gain);
+    SendMessage(gearGainWnd.value, WM_SETTEXT, NULL, LPARAM(strbuf));
 }
 void JetSeat::setEngineGain(float gain) {
     engineGain = gain;
-    SendMessage(engineGainWnd, TBM_SETPOS, TRUE, (int)gain);
-    SendMessage(engineGainWnd, TBM_SETPOSNOTIFY, 0, (int)gain);
+    SendMessage(engineGainWnd.trackbar, TBM_SETPOS, TRUE, (int)gain);
+    SendMessage(engineGainWnd.trackbar, TBM_SETPOSNOTIFY, 0, (int)gain);
+    swprintf_s(strbuf, L"Engine gain  [ %d ]", (int)gain);
+    SendMessage(engineGainWnd.value, WM_SETTEXT, NULL, LPARAM(strbuf));
 }
 void JetSeat::setBumpsGain(float gain) {
     bumpsGain = gain;
-    SendMessage(bumpsGainWnd, TBM_SETPOS, TRUE, (int)gain);
-    SendMessage(bumpsGainWnd, TBM_SETPOSNOTIFY, 0, (int)gain);
+    SendMessage(bumpsGainWnd.trackbar, TBM_SETPOS, TRUE, (int)gain);
+    SendMessage(bumpsGainWnd.trackbar, TBM_SETPOSNOTIFY, 0, (int)gain);
+    swprintf_s(strbuf, L"Bumps gain  [ %d ]", (int)gain);
+    SendMessage(bumpsGainWnd.value, WM_SETTEXT, NULL, LPARAM(strbuf));
 }
 void JetSeat::setYawGain(float gain) {
     yawGain = gain;
-    SendMessage(yawGainWnd, TBM_SETPOS, TRUE, (int)gain);
-    SendMessage(yawGainWnd, TBM_SETPOSNOTIFY, 0, (int)gain);
+    SendMessage(yawGainWnd.trackbar, TBM_SETPOS, TRUE, (int)gain);
+    SendMessage(yawGainWnd.trackbar, TBM_SETPOSNOTIFY, 0, (int)gain);
+    swprintf_s(strbuf, L"Slide gain  [ %d ]", (int)gain);
+    SendMessage(yawGainWnd.value, WM_SETTEXT, NULL, LPARAM(strbuf));
 }
 
 void JetSeat::setEnabled(bool en) {
@@ -341,11 +349,15 @@ void JetSeat::setEnabled(bool en) {
     enabled = en;
     SendMessage(enableWnd, BM_SETCHECK, en ? BST_CHECKED : BST_UNCHECKED, NULL);
     EnableWindow(gearPlaceWnd, en);
-    EnableWindow(gearGainWnd, en);
+    EnableWindow(gearGainWnd.trackbar, en);
+    EnableWindow(gearGainWnd.value, en);
     EnableWindow(enginePlaceWnd, en);
-    EnableWindow(engineGainWnd, en);
-    EnableWindow(bumpsGainWnd, en);
-    EnableWindow(yawGainWnd, en);
+    EnableWindow(engineGainWnd.trackbar, en);
+    EnableWindow(engineGainWnd.value, en);
+    EnableWindow(bumpsGainWnd.trackbar, en);
+    EnableWindow(bumpsGainWnd.value, en);
+    EnableWindow(yawGainWnd.trackbar, en);
+    EnableWindow(yawGainWnd.value, en);
 
     if (!jetseat) 
         return;

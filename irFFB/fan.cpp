@@ -130,7 +130,7 @@ LRESULT CALLBACK Fan::wndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPa
     break;
 
     case WM_HSCROLL: {
-        if ((HWND)lParam == instance->manualWnd)
+        if ((HWND)lParam == instance->manualWnd->trackbar)
             instance->setManualSpeed(SendMessage((HWND)lParam, TBM_GETPOS, 0, 0));
     }
     break;
@@ -202,8 +202,10 @@ UPDATE:
 
 void Fan::setManualSpeed(int s) {
 
-    SendMessage(manualWnd, TBM_SETPOS, TRUE, s);
-    SendMessage(manualWnd, TBM_SETPOSNOTIFY, 0, s);
+    SendMessage(manualWnd->trackbar, TBM_SETPOS, TRUE, s);
+    SendMessage(manualWnd->trackbar, TBM_SETPOSNOTIFY, 0, s);
+    swprintf_s(strbuf, L"Manual fan speed  [ %d ]", s);
+    SendMessage(manualWnd->value, WM_SETTEXT, NULL, LPARAM(strbuf));
     manualSpeed = (float)s;
     setSpeed(manualSpeed * maxSpeedMs / 100);
 

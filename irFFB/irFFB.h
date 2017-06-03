@@ -39,13 +39,21 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define INI_SCAN_FORMAT  "%[^:]:%d:%d:%d:%d:%d:%d:%d:%d\r"
 #define INI_PRINT_FORMAT "%s:%d:%d:%d:%d:%d:%d:%d:%d\r"
 #define MAX_CAR_NAME 32
+#define MAX_LATENCY_TIMES 32
+#define LATENCY_MIN_DX 60
 
 enum ffbType {
     FFBTYPE_360HZ,
     FFBTYPE_360HZ_INTERP,
     FFBTYPE_DIRECT_FILTER,
+    FFBTYPE_DIRECT_FILTER_720,
     FFBTYPE_UNKNOWN
 };
+
+typedef struct sWins {
+    HWND trackbar;
+    HWND value;
+} sWins_t;
 
 DWORD WINAPI readWheelThread(LPVOID);
 DWORD WINAPI directFFBThread(LPVOID);
@@ -56,7 +64,7 @@ LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
 INT_PTR CALLBACK About(HWND, UINT, WPARAM, LPARAM);
 
 HWND combo(HWND, wchar_t *, int, int); 
-HWND slider(HWND, wchar_t *, int, int, wchar_t *, wchar_t *);
+sWins_t *slider(HWND, wchar_t *, int, int, wchar_t *, wchar_t *);
 HWND checkbox(HWND, wchar_t *, int, int); 
 
 bool initVJD();

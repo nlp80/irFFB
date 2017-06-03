@@ -10,16 +10,16 @@ class Settings {
         HWND getDevWnd();
         void setFfbWnd(HWND);
         HWND getFfbWnd();
-        void setMinWnd(HWND);
-        HWND getMinWnd();
-        void setMaxWnd(HWND);
-        HWND getMaxWnd();
-        void setBumpsWnd(HWND);
-        HWND getBumpsWnd();
-        void setLoadWnd(HWND);
-        HWND getLoadWnd();
-        void setYawWnd(HWND);
-        HWND getYawWnd();
+        void setMinWnd(sWins_t *);
+        sWins_t *getMinWnd();
+        void setMaxWnd(sWins_t *);
+        sWins_t *getMaxWnd();
+        void setBumpsWnd(sWins_t *);
+        sWins_t *getBumpsWnd();
+        void setLoadWnd(sWins_t *);
+        sWins_t *getLoadWnd();
+        void setYawWnd(sWins_t *);
+        sWins_t *getYawWnd();
         void setExtraLongWnd(HWND);
         HWND getExtraLongWnd();
         void setUse360Wnd(HWND);
@@ -58,12 +58,14 @@ class Settings {
         void writeSettingsForCar(char *);
 
     private:
-        HWND devWnd, ffbWnd, minWnd, maxWnd, bumpsWnd, loadWnd, yawWnd;
+        HWND devWnd, ffbWnd;
+        sWins_t *minWnd, *maxWnd, *bumpsWnd, *loadWnd, *yawWnd;
         HWND extraLongWnd, use360Wnd, carSpecificWnd;
         int ffbType, ffdeviceIdx, minForce, maxForce;
         float scaleFactor, bumpsFactor, loadFactor, yawFactor;
         bool extraLongLoad, use360ForDirect, useCarSpecific;
         GUID devGuid = GUID_NULL, ffdevices[MAX_FFB_DEVICES];
+        wchar_t strbuf[64];
 
         wchar_t *ffbTypeString(int);
         PWSTR getIniPath();

@@ -47,7 +47,7 @@ class JetSeat {
         bool open();
         bool initEffects();
         ATOM registerClass(HINSTANCE);
-        void effectControls(wchar_t *, int, int, HWND *, HWND *, HINSTANCE);
+        void effectControls(wchar_t *, int, int, HWND *, sWins_t *, HINSTANCE);
         static LRESULT CALLBACK wndProc(HWND, UINT, WPARAM, LPARAM);
         void setGearPlace(int);
         int  getGearPlace();
@@ -72,8 +72,8 @@ class JetSeat {
 
         wchar_t *windowClass = L"JetSeat Configuration";
 
-        HWND mainWnd, gearPlaceWnd, gearGainWnd, bumpsGainWnd;
-        HWND enginePlaceWnd, engineGainWnd, yawGainWnd, enableWnd;
+        HWND mainWnd, gearPlaceWnd, enginePlaceWnd, enableWnd;
+        sWins_t gearGainWnd, bumpsGainWnd, engineGainWnd, yawGainWnd;
 
         UINT effect_handles[MAX_JETSEAT_EFFECTS];
         wchar_t *effectPlaces[3] = { L"Legs", L"Back", L"All" };
@@ -84,5 +84,6 @@ class JetSeat {
 
         int gearPlace, enginePlace, engineCounter = 0;
         float gearGain = 100, bumpsGain = 100, yawGain = 100, engineGain = 0;
+        wchar_t strbuf[64];
 
 };

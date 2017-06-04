@@ -76,8 +76,10 @@ void Settings::setFfbType(int type) {
         return;
     ffbType = type;
     SendMessage(ffbWnd, CB_SETCURSEL, ffbType, 0);
-    EnableWindow(use360Wnd, ffbType == FFBTYPE_DIRECT_FILTER);
-        
+    EnableWindow(
+        use360Wnd,
+        ffbType == FFBTYPE_DIRECT_FILTER || ffbType == FFBTYPE_DIRECT_FILTER_720
+    );    
 }
 int Settings::getFfbType() { return ffbType; }
 

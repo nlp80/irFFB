@@ -536,6 +536,7 @@ int APIENTRY wWinMain(
             wasOnTrack = shockNomSet = false;
             resetForces();
             irConnected = true;
+            timeBeginPeriod(1);
 
         }
 
@@ -974,6 +975,7 @@ int APIENTRY wWinMain(
             resetForces();
             setOnTrackStatus(false);
             setConnectedStatus(false);
+            timeEndPeriod(1);
             if (settings.getUseCarSpecific() && car[0] != 0) 
                 settings.writeSettingsForCar(car);
         }
@@ -1480,16 +1482,13 @@ void reacquireDIDevice() {
 inline void sleepSpinUntil(PLARGE_INTEGER base, UINT sleep, UINT offset) {
 
     LARGE_INTEGER time;
+    LONGLONG until = base->QuadPart + (offset * freq.QuadPart) / 1000000;
 
     std::this_thread::sleep_for(std::chrono::microseconds(sleep));
-    while (true) {
+    do {
+        _asm { pause };
         QueryPerformanceCounter(&time);
-        time.QuadPart -= base->QuadPart;
-        time.QuadPart *= 1000000;
-        time.QuadPart /= freq.QuadPart;
-        if (time.QuadPart > offset)
-            return;
-    }
+    } while (time.QuadPart < until);
 
 }
 

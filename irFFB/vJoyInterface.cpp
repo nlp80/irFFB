@@ -126,6 +126,8 @@ extern "C" {
         FfbDataPacket->size = 0;
         FfbDataPacket->cmd = 0;
 
+        text(L"vJoy FFB thread starting");
+
         while(true)
         {
             // This is an async (overlapped) transaction
@@ -152,7 +154,7 @@ extern "C" {
 
         }
 
-        text(L"vJoy driver error %d, vJoy FFB thread exiting", GetLastError());
+        text(L"vJoy FFB thread exiting");
         return 0;
     
     }

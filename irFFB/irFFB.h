@@ -108,7 +108,7 @@ inline float csignf(float a, float b) {
     __m128 ma = _mm_set_ss(a);
     __m128 mb = _mm_set_ss(b);
     __m128 mm = _mm_set_ss(mask);
-    ma = _mm_andnot_ps(ma, mm);
+    ma = _mm_andnot_ps(mm, ma);
     mb = _mm_and_ps(mb, mm);
     return _mm_cvtss_f32(_mm_or_ps(ma, mb));
 

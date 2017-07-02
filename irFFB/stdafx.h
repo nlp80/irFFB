@@ -20,6 +20,11 @@
 #include <Strsafe.h>
 #include <Shlobj.h>
 #include <timeapi.h>
+#include <shellapi.h>
+#include <dbt.h>
+#include <xmmintrin.h>
+#include <commctrl.h>
+#include <hidclass.h>
 
 #define DIRECTINPUT_VERSION 0x0800 
 #include <dinput.h>

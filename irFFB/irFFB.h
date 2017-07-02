@@ -21,7 +21,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "stdafx.h"
 #include "irsdk_defines.h"
 
-#include <xmmintrin.h>
+#pragma comment(linker, "/manifestdependency:\"type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='x86' publicKeyToken = '6595b64144ccf1df' language = '*'\"")
 
 #define MAX_FFB_DEVICES 16
 #define DI_MAX 10000
@@ -34,13 +34,17 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define LONGLOAD_MAXPOWER 8
 #define STOPS_MAXFORCE_RAD 0.175f // 10 deg
 #define DIRECT_INTERP_SAMPLES 6
-#define KEY_PATH L"Software\\irFFB\\Settings"
+#define SETTINGS_KEY L"Software\\irFFB\\Settings"
+#define RUN_ON_STARTUP_KEY L"Software\\Microsoft\\Windows\\CurrentVersion\\Run"
 #define INI_PATH L"\\irFFB.ini"
 #define INI_SCAN_FORMAT  "%[^:]:%d:%d:%d:%d:%d:%d:%d:%d\r"
 #define INI_PRINT_FORMAT "%s:%d:%d:%d:%d:%d:%d:%d:%d\r"
 #define MAX_CAR_NAME 32
 #define MAX_LATENCY_TIMES 32
 #define LATENCY_MIN_DX 60
+#define HID_CLASS_GUID { 0x745a17a0, 0x74d3, 0x11d0, 0xb6, 0xfe, 0x00, 0xa0, 0xc9, 0x0f, 0x57, 0xda };
+#define WM_TRAY_ICON WM_USER+1
+#define ID_TRAY_EXIT 40000
 
 enum ffbType {
     FFBTYPE_360HZ,
@@ -75,6 +79,7 @@ void setConnectedStatus(bool);
 void setOnTrackStatus(bool);
 void enumDirectInput();
 void initDirectInput();
+void releaseDirectInput();
 void reacquireDIDevice();
 inline void sleepSpinUntil(PLARGE_INTEGER, UINT, UINT);
 inline int scaleTorque(float);

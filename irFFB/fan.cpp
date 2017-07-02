@@ -110,7 +110,7 @@ LRESULT CALLBACK Fan::wndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPa
             if (HIWORD(wParam) == CBN_SELCHANGE) {
                 if ((HWND)lParam == instance->portWnd) {
                     int idx = (int)SendMessage((HWND)lParam, CB_GETCURSEL, 0, 0);
-                    if (idx < instance->numPorts) {
+                    if (idx >= 0 && idx < instance->numPorts) {
                         instance->fanPort = instance->ports[idx].dev;
                         instance->initFanPort();
                     }
@@ -203,7 +203,6 @@ UPDATE:
 void Fan::setManualSpeed(int s) {
 
     SendMessage(manualWnd->trackbar, TBM_SETPOS, TRUE, s);
-    SendMessage(manualWnd->trackbar, TBM_SETPOSNOTIFY, 0, s);
     swprintf_s(strbuf, L"Manual fan speed  [ %d ]", s);
     SendMessage(manualWnd->value, WM_SETTEXT, NULL, LPARAM(strbuf));
     manualSpeed = (float)s;
@@ -349,8 +348,8 @@ void Fan::initFanPort() {
 
     wchar_t *settings = windSimFormat ? L"9600,n,8,1" : L"115200,n,8,1";
 
-    if (fanHandle != INVALID_HANDLE_VALUE)
-        CloseHandle(fanHandle);
+	if (fanHandle != INVALID_HANDLE_VALUE)
+		CloseHandle(fanHandle);
 
     fanHandle = CreateFile(
         fanPort, GENERIC_READ | GENERIC_WRITE, 0, 0, OPEN_EXISTING, FILE_FLAG_NO_BUFFERING, 0
@@ -363,17 +362,24 @@ void Fan::initFanPort() {
     if (!BuildCommDCB(settings, &dcb)) {
         text(L"Error building fan control port parameters");
         CloseHandle(fanHandle);
-        fanHandle = INVALID_HANDLE_VALUE;
+		fanHandle = INVALID_HANDLE_VALUE;
         return;
     }
+
+	dcb.fAbortOnError = FALSE;
 
     if (!SetCommState(fanHandle, &dcb)) {
         text(L"Error setting fan control port parameters");
         CloseHandle(fanHandle);
-        fanHandle = INVALID_HANDLE_VALUE;
+		fanHandle = INVALID_HANDLE_VALUE;
         return;
     }
-
+	
+	COMMTIMEOUTS timeouts;
+	memset(&timeouts, 0, sizeof(timeouts));
+	timeouts.WriteTotalTimeoutConstant = 10;
+	SetCommTimeouts(fanHandle, &timeouts);
+	
     text(L"Connected to fan control port");
 
 }
@@ -403,11 +409,14 @@ void Fan::setSpeed(float speed) {
         buf[0] = buf[2] = 255;
         buf[1] = 88;
         toWrite = 4;
-    }
+	}
+
+	COMSTAT comstat;
+	DWORD errors;
 
     if (!WriteFile(fanHandle, buf, toWrite, &written, NULL))
-        if (GetLastError() != ERROR_IO_PENDING)
-            text(L"Fan write error: %d", GetLastError());
+		if (GetLastError() != ERROR_IO_PENDING)
+			ClearCommError(fanHandle, &errors, &comstat);
 
 }
 
@@ -428,7 +437,7 @@ void Fan::readSettings() {
     fanPort = new wchar_t[128];
     DWORD fanPortSize = 128 * sizeof(wchar_t);
 
-    if (!RegOpenKeyEx(HKEY_CURRENT_USER, KEY_PATH, 0, KEY_ALL_ACCESS, &regKey)) {
+    if (!RegOpenKeyEx(HKEY_CURRENT_USER, SETTINGS_KEY, 0, KEY_ALL_ACCESS, &regKey)) {
 
         if (RegGetValueW(regKey, nullptr, L"fanPort", RRF_RT_REG_SZ, nullptr, fanPort, &fanPortSize)) {
             delete[] fanPort;
@@ -469,11 +478,11 @@ void Fan::writeSettings() {
         fanPortSz = (lstrlen(fanPort) + 1) * sizeof(wchar_t);
 
     RegCreateKeyEx(
-        HKEY_CURRENT_USER, KEY_PATH, 0, nullptr,
+        HKEY_CURRENT_USER, SETTINGS_KEY, 0, nullptr,
         REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, nullptr, &regKey, nullptr
     );
 
-    if (!RegOpenKeyEx(HKEY_CURRENT_USER, KEY_PATH, 0, KEY_ALL_ACCESS, &regKey)) {
+    if (!RegOpenKeyEx(HKEY_CURRENT_USER, SETTINGS_KEY, 0, KEY_ALL_ACCESS, &regKey)) {
 
         if (fanPort)
             RegSetValueEx(regKey, L"fanPort", 0, REG_SZ, (BYTE *)fanPort, fanPortSz);

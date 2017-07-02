@@ -23,12 +23,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "yaml_parser.h"
 #include "vjoyinterface.h"
 
-/*
-#pragma comment(lib, "comctl32.lib")
-#include <commctrl.h >
-#pragma comment(linker, "/manifestdependency:\"type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken = '6595b64144ccf1df' language = '*'\"")
-*/
-
 #define MAX_LOADSTRING 100
 
 #define STATUS_CONNECTED_PART 0
@@ -41,6 +35,7 @@ extern HANDLE hDataValidEvent;
 HINSTANCE hInst;
 WCHAR szTitle[MAX_LOADSTRING];
 WCHAR szWindowClass[MAX_LOADSTRING];
+NOTIFYICONDATA niData;
 
 LPDIRECTINPUT8 pDI = nullptr;
 LPDIRECTINPUTDEVICE8 ffdevice = nullptr;
@@ -174,9 +169,11 @@ DWORD WINAPI directFFBThread(LPVOID lParam) {
     UNREFERENCED_PARAMETER(lParam);
     int16_t mag;
 
-    float s, r;
+    float s;
+	int r;
     __declspec(align(16)) float prod[12];
     __declspec(align(16)) float inter[4];
+    float lastSuspForce = 0, lastYawForce = 0;
     LARGE_INTEGER start;
 
     while (true) {
@@ -220,12 +217,13 @@ DWORD WINAPI directFFBThread(LPVOID lParam) {
                 movaps xmmword ptr inter, xmm0
             }
 
-            r = inter[0] + inter[1] + inter[2] + inter[3] + scaleTorque(yawForce[0]);
+            r = (int)(inter[0] + inter[1] + inter[2] + inter[3]) +
+                    scaleTorque(lastYawForce + (yawForce[0] - lastYawForce) / 2.0f);
 
             if (use360)
-                r += scaleTorque(suspForceST[0]);
+                r += scaleTorque(lastSuspForce + (suspForceST[0] - lastSuspForce) / 2.0f);
 
-            setFFB((int)r);
+            setFFB(r);
 
             for (int i = 1; i < DIRECT_INTERP_SAMPLES * 2 - 1; i++) {
 
@@ -240,28 +238,28 @@ DWORD WINAPI directFFBThread(LPVOID lParam) {
                     movaps xmmword ptr inter, xmm0
                 }
 
-                r = inter[0] + inter[1] + inter[2] + inter[3];
+                r = (int)(inter[0] + inter[1] + inter[2] + inter[3]);
 
-                int idx = i >> 1;
+                int idx = (i - 1) >> 1;
                 bool odd = i & 1;
 
                 if (use360)
                     r +=
                         scaleTorque(
-                            odd ? 
-                                suspForceST[idx]  + (suspForceST[idx + 1] - suspForceST[idx]) / 2 :
-                                suspForceST[idx]
+                            odd ?
+                                suspForceST[idx] :
+                                suspForceST[idx]  + (suspForceST[idx + 1] - suspForceST[idx]) / 2.0f
                         );
 
                 r += 
                     scaleTorque(
                         odd ?
-                            yawForce[idx] + (yawForce[idx + 1] - yawForce[idx]) / 2 :
-                            yawForce[idx]
-                );
+                            yawForce[idx] :
+                            yawForce[idx] + (yawForce[idx + 1] - yawForce[idx]) / 2.0f
+                    );
 
                 sleepSpinUntil(&start, 0, 1380 * i);
-                setFFB((int)r);
+                setFFB(r);
 
             }
 
@@ -275,36 +273,41 @@ DWORD WINAPI directFFBThread(LPVOID lParam) {
                 movaps xmmword ptr inter, xmm0
             }
 
-            r = inter[0] + inter[1] + inter[2] + inter[3];
+            r = (int)(inter[0] + inter[1] + inter[2] + inter[3]);
 
             if (use360)
                 r += scaleTorque(suspForceST[DIRECT_INTERP_SAMPLES - 1]);
 
             r += scaleTorque(yawForce[DIRECT_INTERP_SAMPLES - 1]);
-            setFFB((int)r);
+
+            sleepSpinUntil(&start, 0, 1380 * (DIRECT_INTERP_SAMPLES * 2 - 1));
+            setFFB(r);
+
+            lastSuspForce = suspForceST[DIRECT_INTERP_SAMPLES - 1];
+            lastYawForce = yawForce[DIRECT_INTERP_SAMPLES - 1];
 
             continue;
 
         }
             
         prod[0] = s * firc6[0];
-        r = prod[0] + prod[1] + prod[2] + prod[3] + prod[4] + prod[5] + scaleTorque(yawForce[0]);
+        r = (int)(prod[0] + prod[1] + prod[2] + prod[3] + prod[4] + prod[5]) + scaleTorque(yawForce[0]);
 
         if (use360)
             r += scaleTorque(suspForceST[0]);
 
-        setFFB((int)r);
+        setFFB(r);
 
         for (int i = 1; i < DIRECT_INTERP_SAMPLES; i++) {
 
             prod[i] = s * firc6[i];
-            r = prod[0] + prod[1] + prod[2] + prod[3] + prod[4] + prod[5] + scaleTorque(yawForce[i]);
+            r = (int)(prod[0] + prod[1] + prod[2] + prod[3] + prod[4] + prod[5]) + scaleTorque(yawForce[i]);
 
             if (use360)
                 r += scaleTorque(suspForceST[i]);
 
             sleepSpinUntil(&start, 2000, 2760 * i);
-            setFFB((int)r);
+            setFFB(r);
 
         }
 
@@ -387,6 +390,16 @@ void clippingReport() {
 
 }
 
+void minimise() {
+	Shell_NotifyIcon(NIM_ADD, &niData);
+	ShowWindow(mainWnd, SW_HIDE);
+}
+
+void restore() {
+	Shell_NotifyIcon(NIM_DELETE, &niData);
+	ShowWindow(mainWnd, SW_SHOW);
+}
+
 int APIENTRY wWinMain(
     _In_ HINSTANCE hInstance,
     _In_opt_ HINSTANCE hPrevInstance,
@@ -396,6 +409,8 @@ int APIENTRY wWinMain(
 
     UNREFERENCED_PARAMETER(hPrevInstance);
     UNREFERENCED_PARAMETER(lpCmdLine);
+
+    INITCOMMONCONTROLSEX ccEx;
 
     HANDLE handles[1];
     char *data = nullptr;
@@ -419,6 +434,10 @@ int APIENTRY wWinMain(
     int STnumSamples = 0, STmaxIdx = 0;
     float halfSteerMax = 0, lastTorque = 0, lastSuspForce = 0, redline;
     float yawFilter[DIRECT_INTERP_SAMPLES];
+
+    ccEx.dwICC = ICC_WIN95_CLASSES | ICC_BAR_CLASSES | ICC_STANDARD_CLASSES;
+    ccEx.dwSize = sizeof(ccEx);
+    InitCommonControlsEx(&ccEx);
 
     HACCEL hAccelTable = LoadAccelerators(hInstance, MAKEINTRESOURCE(IDC_IRFFB));
 
@@ -463,6 +482,12 @@ int APIENTRY wWinMain(
     setConnectedStatus(false);
     setOnTrackStatus(false);
     settings.readRegSettings(true, car);
+
+	if (settings.getStartMinimised())
+		minimise();
+	else
+		restore();
+
     enumDirectInput();
 
     LARGE_INTEGER start;
@@ -919,10 +944,8 @@ int APIENTRY wWinMain(
                 case FFBTYPE_360HZ: {
 
                     for (int i = 0; i < STmaxIdx; i++) {
-
                         setFFB(scaleTorque(swTorqueST[i] + suspForceST[i] + yawForce[i]));
                         sleepSpinUntil(&start, 2000, 2760 * (i + 1));
-
                     }
                     setFFB(scaleTorque(swTorqueST[STmaxIdx] + suspForceST[STmaxIdx] + yawForce[STmaxIdx]));
 
@@ -931,27 +954,30 @@ int APIENTRY wWinMain(
 
                 case FFBTYPE_360HZ_INTERP: {
 
-                    float diff = swTorqueST[0] - lastTorque;
-                    float sdiff = suspForceST[0] - lastSuspForce;
-                    setFFB(scaleTorque(lastTorque + diff / 2.0f + lastSuspForce + sdiff / 2.0f + yawForce[0]));
-                    sleepSpinUntil(&start, 0, 1380);
+                    float diff = (swTorqueST[0] - lastTorque) / 2.0f;
+                    float sdiff = (suspForceST[0] - lastSuspForce) / 2.0f;
+					int force, iMax = STmaxIdx << 1;
 
-                    for (int i = 0; i < STmaxIdx << 1; i++) {
+                    setFFB(scaleTorque(lastTorque + diff + lastSuspForce + sdiff + yawForce[0]));
+
+                    for (int i = 0; i < iMax; i++) {
 
                         int idx = i >> 1;
 
                         if (i & 1) {
-                            diff = swTorqueST[idx + 1] - swTorqueST[idx];
-                            sdiff = suspForceST[idx + 1] - suspForceST[idx];
-                            setFFB(scaleTorque(swTorqueST[idx] + diff / 2.0f + suspForceST[idx] + sdiff / 2.0f + yawForce[idx]));
+                            diff = (swTorqueST[idx + 1] - swTorqueST[idx]) / 2.0f;
+                            sdiff = (suspForceST[idx + 1] - suspForceST[idx]) / 2.0f;
+                            force = scaleTorque(swTorqueST[idx] + diff + suspForceST[idx] + sdiff + yawForce[idx]);
                         }
                         else
-                            setFFB(scaleTorque(swTorqueST[idx] + suspForceST[idx] + yawForce[idx]));
+                            force = scaleTorque(swTorqueST[idx] + suspForceST[idx] + yawForce[idx]);
 
-                        sleepSpinUntil(&start, 0, 1380 * (i + 2));
+                        sleepSpinUntil(&start, 0, 1380 * (i + 1));
+						setFFB(force);
 
                     }
 
+					sleepSpinUntil(&start, 0, 1380 * (iMax + 1));
                     setFFB(scaleTorque(swTorqueST[STmaxIdx] + suspForceST[STmaxIdx] + yawForce[STmaxIdx]));
                     lastTorque = swTorqueST[STmaxIdx];
                     lastSuspForce = suspForceST[STmaxIdx];
@@ -1086,40 +1112,60 @@ HWND checkbox(HWND parent, wchar_t *name, int x, int y) {
 
 BOOL InitInstance(HINSTANCE hInstance, int nCmdShow) {
 
+    DEV_BROADCAST_DEVICEINTERFACE devFilter;
+
     hInst = hInstance;
 
     mainWnd = CreateWindowW(
         szWindowClass, szTitle,
         WS_OVERLAPPEDWINDOW ^ WS_THICKFRAME,
-        CW_USEDEFAULT, CW_USEDEFAULT, 432, 980,
+        CW_USEDEFAULT, CW_USEDEFAULT, 864, 720,
         NULL, NULL, hInst, NULL
     );
 
     if (!mainWnd)
         return FALSE;
+	
+    memset(&niData, 0, sizeof(niData));
+	niData.uVersion = NOTIFYICON_VERSION;
+    niData.cbSize = NOTIFYICONDATA_V1_SIZE;
+    niData.hWnd = mainWnd;
+    niData.uID = 1;
+    niData.uFlags = NIF_ICON | NIF_MESSAGE;
+    niData.uCallbackMessage = WM_TRAY_ICON;
+	niData.hIcon = LoadIcon(hInst, MAKEINTRESOURCE(IDI_SMALL));
 
     settings.setDevWnd(combo(mainWnd, L"FFB device:", 44, 20));
     settings.setFfbWnd(combo(mainWnd, L"FFB type:", 44, 80));
-    settings.setMinWnd(slider(mainWnd, L"Min force:", 44, 144, L"0", L"20"));
-    settings.setMaxWnd(slider(mainWnd, L"Max force:", 44, 216, L"5 Nm", L"65 Nm"));
-    settings.setBumpsWnd(slider(mainWnd, L"Suspension bumps:", 44, 288, L"0", L"100"));
-    settings.setLoadWnd(slider(mainWnd, L"Suspension load:", 44, 360, L"0", L"100"));
-    settings.setYawWnd(slider(mainWnd, L"SoP effect:", 44, 428, L"0", L"100"));
+    settings.setMinWnd(slider(mainWnd, L"Min force:", 44, 154, L"0", L"20"));
+    settings.setMaxWnd(slider(mainWnd, L"Max force:", 44, 226, L"5 Nm", L"65 Nm"));
+    settings.setBumpsWnd(slider(mainWnd, L"Suspension bumps:", 464, 40, L"0", L"100"));
+    settings.setLoadWnd(slider(mainWnd, L"Suspension load:", 464, 100, L"0", L"100"));
+    settings.setYawWnd(slider(mainWnd, L"SoP effect:", 464, 164, L"0", L"100"));
     settings.setExtraLongWnd(
-        checkbox(mainWnd, L" Increased longitudinal weight transfer effect?", 30, 496)
+        checkbox(mainWnd, L" Increased longitudinal weight transfer effect?", 460, 230)
     );
     settings.setUse360Wnd(
         checkbox(
             mainWnd, 
             L" Use 360 Hz telemetry for suspension effects\r\n in direct modes?",
-            30, 542
+            460, 280
         )
     );
     settings.setCarSpecificWnd(
-        checkbox(mainWnd, L"Use car specific settings?", 30, 586)
+        checkbox(mainWnd, L" Use car specific settings?", 460, 326)
     );
+	settings.setReduceWhenParkedWnd(
+		checkbox(mainWnd, L" Reduce force when parked?", 460, 420)
+	);
+	settings.setRunOnStartupWnd(
+		checkbox(mainWnd, L" Run on startup?", 460, 520)
+	);
+	settings.setStartMinimisedWnd(
+		checkbox(mainWnd, L" Start minimised?", 460, 560)
+	);
 
-    int statusParts[] = { 128, 212, 432 };
+    int statusParts[] = { 256, 424, 864 };
 
     statusWnd = CreateWindowEx(
         0, STATUSCLASSNAME, NULL,
@@ -1131,13 +1177,19 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow) {
     textWnd = CreateWindowEx(
         WS_EX_CLIENTEDGE, L"EDIT", L"",
         WS_VISIBLE | WS_VSCROLL | WS_CHILD | ES_LEFT | ES_MULTILINE | ES_AUTOVSCROLL,
-        16, 644, 384, 240,
+        32, 312, 376, 300,
         mainWnd, NULL, hInst, NULL
     );
     SendMessage(textWnd, EM_SETLIMITTEXT, WPARAM(256000), 0);
 
-    ShowWindow(mainWnd, nCmdShow);
+    ShowWindow(mainWnd, SW_HIDE);
     UpdateWindow(mainWnd);
+
+    memset(&devFilter, 0, sizeof(devFilter));
+	devFilter.dbcc_classguid = GUID_DEVINTERFACE_HID;
+    devFilter.dbcc_size = sizeof(devFilter);
+    devFilter.dbcc_devicetype = DBT_DEVTYP_DEVICEINTERFACE;
+    RegisterDeviceNotificationW(mainWnd, &devFilter, DEVICE_NOTIFY_WINDOW_HANDLE);
 
     return TRUE;
 
@@ -1174,12 +1226,18 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                     }
                     else if (HIWORD(wParam) == BN_CLICKED) {
                         bool oldValue = SendMessage((HWND)lParam, BM_GETCHECK, 0, 0) == BST_CHECKED;
-                        if ((HWND)lParam == settings.getUse360Wnd())
-                            settings.setUse360ForDirect(!oldValue);
-                        else if ((HWND)lParam == settings.getExtraLongWnd())
-                            settings.setExtraLongLoad(!oldValue);
-                        else if ((HWND)lParam == settings.getCarSpecificWnd())
-                            settings.setUseCarSpecific(!oldValue, car);
+						if ((HWND)lParam == settings.getUse360Wnd())
+							settings.setUse360ForDirect(!oldValue);
+						else if ((HWND)lParam == settings.getExtraLongWnd())
+							settings.setExtraLongLoad(!oldValue);
+						else if ((HWND)lParam == settings.getCarSpecificWnd())
+							settings.setUseCarSpecific(!oldValue, car);
+						else if ((HWND)lParam == settings.getReduceWhenParkedWnd())
+							settings.setReduceWhenParked(!oldValue);
+						else if ((HWND)lParam == settings.getRunOnStartupWnd())
+							settings.setRunOnStartup(!oldValue);
+						else if ((HWND)lParam == settings.getStartMinimisedWnd())
+							settings.setStartMinimised(!oldValue);
                     }
                     return DefWindowProc(hWnd, message, wParam, lParam);
             }
@@ -1206,12 +1264,18 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         }
         break;
 
-        case WM_PAINT: {
-            PAINTSTRUCT ps;
-            BeginPaint(hWnd, &ps);
-            EndPaint(hWnd, &ps);
-        }
-        break;
+		case WM_PRINTCLIENT: {
+			RECT r = { 0 };
+			GetClientRect(hWnd, &r);
+			FillRect((HDC)wParam, &r, CreateSolidBrush(RGB(0xff, 0xff, 0xff)));
+		}
+		break;
+
+		case WM_SIZE: {
+			SendMessage(statusWnd, WM_SIZE, wParam, lParam);
+			return DefWindowProc(hWnd, message, wParam, lParam);
+		}
+		break;
 
         case WM_POWERBROADCAST: {
             int wmId = LOWORD(wParam);
@@ -1226,7 +1290,57 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         }
         break;
 
+        case WM_TRAY_ICON: {
+			switch (lParam) {
+				case WM_LBUTTONUP:
+					restore();
+				break;
+				case WM_RBUTTONUP: {
+					HMENU trayMenu = CreatePopupMenu();
+					POINT curPoint;
+					AppendMenuW(trayMenu, MF_STRING, ID_TRAY_EXIT, L"Exit");
+					GetCursorPos(&curPoint);
+					SetForegroundWindow(hWnd);
+					if (
+						TrackPopupMenu(
+							trayMenu, TPM_RETURNCMD | TPM_NONOTIFY,
+							curPoint.x, curPoint.y, 0, hWnd, NULL
+						) == ID_TRAY_EXIT
+					)
+						PostQuitMessage(0);
+					DestroyMenu(trayMenu);
+				}
+				break;
+			}
+					
+        }
+        break;
+
+		case WM_DEVICECHANGE: {
+			DEV_BROADCAST_HDR *hdr = (DEV_BROADCAST_HDR *)lParam;
+			if (wParam != DBT_DEVICEARRIVAL && wParam != DBT_DEVICEREMOVECOMPLETE)
+				return 0;
+			if (hdr->dbch_devicetype != DBT_DEVTYP_DEVICEINTERFACE)
+				return 0;
+			enumDirectInput();
+			if (!settings.isFfbDevicePresent())
+				releaseDirectInput();
+		}
+        break;
+
+		case WM_SYSCOMMAND: {
+			switch (wParam & 0xfff0) {
+				case SC_MINIMIZE:
+					minimise();
+					return 0;
+				default:
+					return DefWindowProc(hWnd, message, wParam, lParam);
+			}
+		}
+		break;
+
         case WM_DESTROY: {
+			Shell_NotifyIcon(NIM_DELETE, &niData);
             releaseAll();
             if (settings.getUseCarSpecific() && car[0] != 0)
                 settings.writeSettingsForCar(car);
@@ -1349,6 +1463,8 @@ BOOL CALLBACK EnumObjectCallback(const LPCDIDEVICEOBJECTINSTANCE inst, VOID *dw)
 
 void enumDirectInput() {
 
+    settings.clearFfbDevices();
+
     if (
         FAILED(
             DirectInput8Create(
@@ -1374,22 +1490,12 @@ void initDirectInput() {
     HRESULT hr;
 
     numButtons = numPov = 0;
+	di.dwSize = sizeof(DIDEVICEINSTANCE);
 
-    if (ffdevice) {
-        ffdevice->Unacquire();
-        ffdevice->Release();
-        ffdevice = nullptr;
-    }
+	if (ffdevice && effect && ffdevice->GetDeviceInfo(&di) >= 0 && di.guidInstance == settings.getFfbDevice())
+		return;
 
-    if (effect) {
-        effect->Release();
-        effect = nullptr;
-    }
-
-    if (pDI) {
-        pDI->Release();
-        pDI = nullptr;
-    }
+	releaseDirectInput();
 
     if (
         FAILED(
@@ -1417,7 +1523,6 @@ void initDirectInput() {
         return;
     }
 
-    di.dwSize = sizeof(DIDEVICEINSTANCE);
     if (FAILED(ffdevice->GetDeviceInfo(&di))) {
         text(L"Failed to get info for DI device!");
         return;
@@ -1427,13 +1532,11 @@ void initDirectInput() {
         text(L"Failed to enumerate DI device buttons");
         return;
     }
-    text(L"DI device has %d buttons", numButtons);
 
     if (FAILED(ffdevice->EnumObjects(EnumObjectCallback, (VOID *)&numPov, DIDFT_POV))) {
         text(L"Failed to enumerate DI device povs");
         return;
     }
-    text(L"DI device has %d POV", numPov);
 
     if (FAILED(ffdevice->SetEventNotification(wheelEvent))) {
         text(L"Failed to set event notification on DI device");
@@ -1444,6 +1547,8 @@ void initDirectInput() {
         text(L"Failed to acquire DI device");
         return;
     }
+
+	text(L"Acquired DI device with %d buttons and %d POV", numButtons, numPov);
 
     if (FAILED(ffdevice->CreateEffect(GUID_Sine, &dieff, &effect, nullptr))) {
         text(L"Failed to create sine periodic effect");
@@ -1459,6 +1564,26 @@ void initDirectInput() {
     if (hr == DIERR_NOTINITIALIZED || hr == DIERR_INPUTLOST || hr == DIERR_INCOMPLETEEFFECT || hr == DIERR_INVALIDPARAM)
         text(L"Error setting parameters of DIEFFECT: %d", hr);
         
+}
+
+void releaseDirectInput() {
+
+	if (effect) {
+		setFFB(0);
+		effect->Stop();
+		effect->Release();
+		effect = nullptr;
+	}
+	if (ffdevice) {
+		ffdevice->Unacquire();
+		ffdevice->Release();
+		ffdevice = nullptr;
+	}
+	if (pDI) {
+		pDI->Release();
+		pDI = nullptr;
+	}
+
 }
 
 void reacquireDIDevice() {
@@ -1515,7 +1640,7 @@ inline void setFFB(int mag) {
     samples++;
     int minForce = settings.getMinForce();
 
-    if (stopped)
+    if (stopped && settings.getReduceWhenParked())
         mag /= 4;
     else if (minForce) {
         if (mag > 0 && mag < minForce)
@@ -1625,21 +1750,8 @@ void initAll() {
 
 void releaseAll() {
 
-    if (effect) {
-        setFFB(0);
-        effect->Stop();
-        effect->Release();
-        effect = nullptr;
-    }
-    if (ffdevice) {
-        ffdevice->Unacquire();
-        ffdevice->Release();
-        ffdevice = nullptr;
-    }
-    if (pDI) {
-        pDI->Release();
-        pDI = nullptr;
-    }
+	releaseDirectInput();
+
     if (fan)
         fan->setSpeed(0);
 

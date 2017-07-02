@@ -44,9 +44,20 @@ void Settings::setExtraLongWnd(HWND wnd) { extraLongWnd = wnd; }
 HWND Settings::getExtraLongWnd() { return extraLongWnd; }
 void Settings::setUse360Wnd(HWND wnd) { use360Wnd = wnd; }
 HWND Settings::getUse360Wnd() { return use360Wnd; }
-
+void Settings::setReduceWhenParkedWnd(HWND wnd) { reduceWhenParkedWnd = wnd; }
+HWND Settings::getReduceWhenParkedWnd() { return reduceWhenParkedWnd; }
 void Settings::setCarSpecificWnd(HWND wnd) { carSpecificWnd = wnd; }
 HWND Settings::getCarSpecificWnd() { return carSpecificWnd; }
+void Settings::setRunOnStartupWnd(HWND wnd) { runOnStartupWnd = wnd; }
+HWND Settings::getRunOnStartupWnd() { return runOnStartupWnd; }
+void Settings::setStartMinimisedWnd(HWND wnd) { startMinimisedWnd = wnd; }
+HWND Settings::getStartMinimisedWnd() { return startMinimisedWnd; }
+
+void Settings::clearFfbDevices() {
+    memset(ffdevices, 0, sizeof(ffdevices));
+    ffdeviceIdx = 0;
+    SendMessage(devWnd, CB_RESETCONTENT, 0, 0);
+}
 
 void Settings::addFfbDevice(GUID dev, const wchar_t *name) {
     
@@ -65,6 +76,13 @@ void Settings::setFfbDevice(int idx) {
     SendMessage(devWnd, CB_SETCURSEL, idx, 0);
     devGuid = ffdevices[idx];
     initDirectInput();
+}
+
+bool Settings::isFfbDevicePresent() {
+	for (int i = 0; i < ffdeviceIdx; i++)
+		if (ffdevices[i] == devGuid)
+			return true;
+	return false;
 }
         
 GUID Settings::getFfbDevice() {
@@ -88,7 +106,6 @@ void Settings::setMinForce(int min) {
         return;
     minForce = min * MINFORCE_MULTIPLIER;
     SendMessage(minWnd->trackbar, TBM_SETPOS, TRUE, min);
-    SendMessage(minWnd->trackbar, TBM_SETPOSNOTIFY, 0, min);
     swprintf_s(strbuf, L"Min force  [ %d ]", min);
     SendMessage(minWnd->value, WM_SETTEXT, NULL, LPARAM(strbuf));
 }
@@ -99,7 +116,6 @@ void Settings::setMaxForce(int max) {
         return;
     maxForce = max;
     SendMessage(maxWnd->trackbar, TBM_SETPOS, TRUE, maxForce);
-    SendMessage(maxWnd->trackbar, TBM_SETPOSNOTIFY, 0, maxForce);
     swprintf_s(strbuf, L"Max force  [ %d Nm ]", max);
     SendMessage(maxWnd->value, WM_SETTEXT, NULL, LPARAM(strbuf));
     scaleFactor = (float)DI_MAX / maxForce;
@@ -116,7 +132,6 @@ void Settings::setBumpsFactor(int factor) {
         return;
     bumpsFactor = pow((float)factor, 2) * BUMPSFORCE_MULTIPLIER;
     SendMessage(bumpsWnd->trackbar, TBM_SETPOS, TRUE, factor);
-    SendMessage(bumpsWnd->trackbar, TBM_SETPOSNOTIFY, 0, factor);
     swprintf_s(strbuf, L"Suspension bumps  [ %d ]", factor);
     SendMessage(bumpsWnd->value, WM_SETTEXT, NULL, LPARAM(strbuf));
 }
@@ -127,7 +142,6 @@ void Settings::setLoadFactor(int factor) {
         return;
     loadFactor = pow((float)factor, 2) * LOADFORCE_MULTIPLIER;
     SendMessage(loadWnd->trackbar, TBM_SETPOS, TRUE, factor);
-    SendMessage(loadWnd->trackbar, TBM_SETPOSNOTIFY, 0, factor);
     swprintf_s(strbuf, L"Suspension load  [ %d ]", factor);
     SendMessage(loadWnd->value, WM_SETTEXT, NULL, LPARAM(strbuf));
 }
@@ -138,7 +152,6 @@ void Settings::setYawFactor(int factor) {
         return;
     yawFactor = (float)factor;
     SendMessage(yawWnd->trackbar, TBM_SETPOS, TRUE, factor);
-    SendMessage(yawWnd->trackbar, TBM_SETPOSNOTIFY, 0, factor);
     swprintf_s(strbuf, L"SoP  [ %d ]", factor);
     SendMessage(yawWnd->value, WM_SETTEXT, NULL, LPARAM(strbuf));
 }
@@ -178,6 +191,44 @@ void Settings::setUseCarSpecific(bool set, char *car) {
 }
 bool Settings::getUseCarSpecific() { return useCarSpecific; }
 
+void Settings::setReduceWhenParked(bool reduce) { 
+	reduceWhenParked = reduce; 
+	SendMessage(reduceWhenParkedWnd, BM_SETCHECK, reduce ? BST_CHECKED : BST_UNCHECKED, NULL);
+}
+bool Settings::getReduceWhenParked() { return reduceWhenParked; }
+
+void Settings::setRunOnStartup(bool run) { 
+
+	HKEY regKey;
+	wchar_t module[MAX_PATH];
+
+	runOnStartup = run;
+	SendMessage(runOnStartupWnd, BM_SETCHECK, run ? BST_CHECKED : BST_UNCHECKED, NULL);
+
+	DWORD len = GetModuleFileNameW(NULL, module, MAX_PATH);
+	
+	if (RegOpenKeyExW(HKEY_CURRENT_USER, RUN_ON_STARTUP_KEY, 0, KEY_ALL_ACCESS, &regKey)) {
+		text(L"Failed to open startup registry key");
+		return;
+	}
+
+	if (run) {
+		if (RegSetValueExW(regKey, L"irFFB", 0, REG_SZ, (BYTE *)&module, ++len * sizeof(wchar_t)))
+			text(L"Failed to create startup registry value");
+	}
+	else
+		if (RegDeleteValueW(regKey, L"irFFB"))
+			text(L"Failed to remove startup registry value");
+
+}
+bool Settings::getRunOnStartup() { return runOnStartup; }
+
+void Settings::setStartMinimised(bool minimised) {
+	startMinimised = minimised;
+	SendMessage(startMinimisedWnd, BM_SETCHECK, minimised ? BST_CHECKED : BST_UNCHECKED, NULL);
+}
+bool Settings::getStartMinimised() { return startMinimised; }
+
 int Settings::getBumpsSetting() {
     return (int)(sqrt(bumpsFactor / BUMPSFORCE_MULTIPLIER));
 }
@@ -197,11 +248,11 @@ void Settings::writeCarSpecificSetting() {
     DWORD specific = useCarSpecific;  
 
     RegCreateKeyEx(
-        HKEY_CURRENT_USER, KEY_PATH, 0, nullptr,
+        HKEY_CURRENT_USER, SETTINGS_KEY, 0, nullptr,
         REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, nullptr, &regKey, nullptr
     );
 
-    if (!RegOpenKeyEx(HKEY_CURRENT_USER, KEY_PATH, 0, KEY_ALL_ACCESS, &regKey))
+    if (!RegOpenKeyEx(HKEY_CURRENT_USER, SETTINGS_KEY, 0, KEY_ALL_ACCESS, &regKey))
         RegSetValueEx(regKey, L"useCarSpecific", 0, REG_DWORD, (BYTE *)&specific, sz);
 
 }
@@ -214,7 +265,7 @@ void Settings::readRegSettings(bool readCarSpecific, char *car) {
     DWORD sz = sizeof(val);
     DWORD dgsz = sizeof(dguid);
 
-    if (!RegOpenKeyEx(HKEY_CURRENT_USER, KEY_PATH, 0, KEY_ALL_ACCESS, &regKey)) {
+    if (!RegOpenKeyEx(HKEY_CURRENT_USER, SETTINGS_KEY, 0, KEY_ALL_ACCESS, &regKey)) {
 
         if (!RegGetValue(regKey, nullptr, L"device", RRF_RT_REG_SZ, nullptr, dguid, &dgsz))
             if (FAILED(IIDFromString(dguid, &devGuid)))
@@ -251,6 +302,18 @@ void Settings::readRegSettings(bool readCarSpecific, char *car) {
             setExtraLongLoad(false);
         else
             setExtraLongLoad(val > 0);
+		if (RegGetValue(regKey, nullptr, L"reduceWhenParked", RRF_RT_REG_DWORD, nullptr, &val, &sz))
+			setReduceWhenParked(true);
+		else
+			setReduceWhenParked(val > 0);
+		if (RegGetValue(regKey, nullptr, L"runOnStartup", RRF_RT_REG_DWORD, nullptr, &val, &sz))
+			setRunOnStartup(false);
+		else
+			setRunOnStartup(val > 0);
+		if (RegGetValue(regKey, nullptr, L"startMinimised", RRF_RT_REG_DWORD, nullptr, &val, &sz))
+			setStartMinimised(false);
+		else
+			setStartMinimised(val > 0);
         if (readCarSpecific) {
             if (RegGetValue(regKey, nullptr, L"useCarSpecific", RRF_RT_REG_DWORD, nullptr, &val, &sz))
                 setUseCarSpecific(false, car);
@@ -268,6 +331,9 @@ void Settings::readRegSettings(bool readCarSpecific, char *car) {
         setYawFactor(0);
         setUse360ForDirect(true);
         setExtraLongLoad(false);
+		setReduceWhenParked(true);
+		setStartMinimised(false);
+		setRunOnStartup(false);
         setUseCarSpecific(false, car);
     }
 
@@ -283,14 +349,17 @@ void Settings::writeRegSettings() {
     DWORD min = getMinForceSetting();
     DWORD use360 = getUse360ForDirect();
     DWORD extraLong = getExtraLongLoad();
+	DWORD reduceParked = getReduceWhenParked();
+	DWORD runOnStartup = getRunOnStartup();
+	DWORD startMinimised = getStartMinimised();
     DWORD yaw = (DWORD)yawFactor;
 
     RegCreateKeyEx(
-        HKEY_CURRENT_USER, KEY_PATH, 0, nullptr,
+        HKEY_CURRENT_USER, SETTINGS_KEY, 0, nullptr,
         REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, nullptr, &regKey, nullptr
     );
 
-    if (!RegOpenKeyEx(HKEY_CURRENT_USER, KEY_PATH, 0, KEY_ALL_ACCESS, &regKey)) {
+    if (!RegOpenKeyEx(HKEY_CURRENT_USER, SETTINGS_KEY, 0, KEY_ALL_ACCESS, &regKey)) {
 
         if (SUCCEEDED(StringFromCLSID(devGuid, (LPOLESTR *)&guid))) {
             int len = (lstrlenW(guid) + 1) * sizeof(wchar_t);
@@ -304,6 +373,9 @@ void Settings::writeRegSettings() {
         RegSetValueEx(regKey, L"minForce", 0, REG_DWORD, (BYTE *)&min, sz);
         RegSetValueEx(regKey, L"use360ForDirect", 0, REG_DWORD, (BYTE *)&use360, sz);
         RegSetValueEx(regKey, L"extraLongLoad", 0, REG_DWORD, (BYTE *)&extraLong, sz);
+		RegSetValueEx(regKey, L"reduceWhenParked", 0, REG_DWORD, (BYTE *)&reduceParked, sz);
+		RegSetValueEx(regKey, L"runOnStartup", 0, REG_DWORD, (BYTE *)&runOnStartup, sz);
+		RegSetValueEx(regKey, L"startMinimised", 0, REG_DWORD, (BYTE *)&startMinimised, sz);
 
     }
 

@@ -559,7 +559,7 @@ void JetSeat::readSettings() {
     float fval;
     DWORD sz = sizeof(dval);
 
-    if (!RegOpenKeyEx(HKEY_CURRENT_USER, KEY_PATH, 0, KEY_ALL_ACCESS, &regKey)) {
+    if (!RegOpenKeyEx(HKEY_CURRENT_USER, SETTINGS_KEY, 0, KEY_ALL_ACCESS, &regKey)) {
 
         if (RegGetValueW(regKey, nullptr, L"jsGearPlace", RRF_RT_REG_DWORD, nullptr, &dval, &sz))
             setGearPlace(BACK);
@@ -613,11 +613,11 @@ void JetSeat::writeSettings() {
     DWORD enabled = isEnabled();
 
     RegCreateKeyEx(
-        HKEY_CURRENT_USER, KEY_PATH, 0, nullptr,
+        HKEY_CURRENT_USER, SETTINGS_KEY, 0, nullptr,
         REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, nullptr, &regKey, nullptr
     );
 
-    if (!RegOpenKeyEx(HKEY_CURRENT_USER, KEY_PATH, 0, KEY_ALL_ACCESS, &regKey)) {
+    if (!RegOpenKeyEx(HKEY_CURRENT_USER, SETTINGS_KEY, 0, KEY_ALL_ACCESS, &regKey)) {
 
         RegSetValueEx(regKey, L"jsGearPlace", 0, REG_DWORD, (BYTE *)&gearP, sz);
         RegSetValueEx(regKey, L"jsEnginePlace", 0, REG_DWORD, (BYTE *)&engineP, sz);

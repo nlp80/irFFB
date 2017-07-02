@@ -348,8 +348,8 @@ void Fan::initFanPort() {
 
     wchar_t *settings = windSimFormat ? L"9600,n,8,1" : L"115200,n,8,1";
 
-	if (fanHandle != INVALID_HANDLE_VALUE)
-		CloseHandle(fanHandle);
+    if (fanHandle != INVALID_HANDLE_VALUE)
+        CloseHandle(fanHandle);
 
     fanHandle = CreateFile(
         fanPort, GENERIC_READ | GENERIC_WRITE, 0, 0, OPEN_EXISTING, FILE_FLAG_NO_BUFFERING, 0
@@ -362,24 +362,24 @@ void Fan::initFanPort() {
     if (!BuildCommDCB(settings, &dcb)) {
         text(L"Error building fan control port parameters");
         CloseHandle(fanHandle);
-		fanHandle = INVALID_HANDLE_VALUE;
+        fanHandle = INVALID_HANDLE_VALUE;
         return;
     }
 
-	dcb.fAbortOnError = FALSE;
+    dcb.fAbortOnError = FALSE;
 
     if (!SetCommState(fanHandle, &dcb)) {
         text(L"Error setting fan control port parameters");
         CloseHandle(fanHandle);
-		fanHandle = INVALID_HANDLE_VALUE;
+        fanHandle = INVALID_HANDLE_VALUE;
         return;
     }
-	
-	COMMTIMEOUTS timeouts;
-	memset(&timeouts, 0, sizeof(timeouts));
-	timeouts.WriteTotalTimeoutConstant = 10;
-	SetCommTimeouts(fanHandle, &timeouts);
-	
+    
+    COMMTIMEOUTS timeouts;
+    memset(&timeouts, 0, sizeof(timeouts));
+    timeouts.WriteTotalTimeoutConstant = 10;
+    SetCommTimeouts(fanHandle, &timeouts);
+    
     text(L"Connected to fan control port");
 
 }
@@ -409,14 +409,14 @@ void Fan::setSpeed(float speed) {
         buf[0] = buf[2] = 255;
         buf[1] = 88;
         toWrite = 4;
-	}
+    }
 
-	COMSTAT comstat;
-	DWORD errors;
+    COMSTAT comstat;
+    DWORD errors;
 
     if (!WriteFile(fanHandle, buf, toWrite, &written, NULL))
-		if (GetLastError() != ERROR_IO_PENDING)
-			ClearCommError(fanHandle, &errors, &comstat);
+        if (GetLastError() != ERROR_IO_PENDING)
+            ClearCommError(fanHandle, &errors, &comstat);
 
 }
 

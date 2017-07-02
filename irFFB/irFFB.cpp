@@ -170,7 +170,7 @@ DWORD WINAPI directFFBThread(LPVOID lParam) {
     int16_t mag;
 
     float s;
-	int r;
+    int r;
     __declspec(align(16)) float prod[12];
     __declspec(align(16)) float inter[4];
     float lastSuspForce = 0, lastYawForce = 0;
@@ -391,13 +391,13 @@ void clippingReport() {
 }
 
 void minimise() {
-	Shell_NotifyIcon(NIM_ADD, &niData);
-	ShowWindow(mainWnd, SW_HIDE);
+    Shell_NotifyIcon(NIM_ADD, &niData);
+    ShowWindow(mainWnd, SW_HIDE);
 }
 
 void restore() {
-	Shell_NotifyIcon(NIM_DELETE, &niData);
-	ShowWindow(mainWnd, SW_SHOW);
+    Shell_NotifyIcon(NIM_DELETE, &niData);
+    ShowWindow(mainWnd, SW_SHOW);
 }
 
 int APIENTRY wWinMain(
@@ -483,10 +483,10 @@ int APIENTRY wWinMain(
     setOnTrackStatus(false);
     settings.readRegSettings(true, car);
 
-	if (settings.getStartMinimised())
-		minimise();
-	else
-		restore();
+    if (settings.getStartMinimised())
+        minimise();
+    else
+        restore();
 
     enumDirectInput();
 
@@ -956,7 +956,7 @@ int APIENTRY wWinMain(
 
                     float diff = (swTorqueST[0] - lastTorque) / 2.0f;
                     float sdiff = (suspForceST[0] - lastSuspForce) / 2.0f;
-					int force, iMax = STmaxIdx << 1;
+                    int force, iMax = STmaxIdx << 1;
 
                     setFFB(scaleTorque(lastTorque + diff + lastSuspForce + sdiff + yawForce[0]));
 
@@ -973,11 +973,11 @@ int APIENTRY wWinMain(
                             force = scaleTorque(swTorqueST[idx] + suspForceST[idx] + yawForce[idx]);
 
                         sleepSpinUntil(&start, 0, 1380 * (i + 1));
-						setFFB(force);
+                        setFFB(force);
 
                     }
 
-					sleepSpinUntil(&start, 0, 1380 * (iMax + 1));
+                    sleepSpinUntil(&start, 0, 1380 * (iMax + 1));
                     setFFB(scaleTorque(swTorqueST[STmaxIdx] + suspForceST[STmaxIdx] + yawForce[STmaxIdx]));
                     lastTorque = swTorqueST[STmaxIdx];
                     lastSuspForce = suspForceST[STmaxIdx];
@@ -1125,15 +1125,15 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow) {
 
     if (!mainWnd)
         return FALSE;
-	
+    
     memset(&niData, 0, sizeof(niData));
-	niData.uVersion = NOTIFYICON_VERSION;
+    niData.uVersion = NOTIFYICON_VERSION;
     niData.cbSize = NOTIFYICONDATA_V1_SIZE;
     niData.hWnd = mainWnd;
     niData.uID = 1;
     niData.uFlags = NIF_ICON | NIF_MESSAGE;
     niData.uCallbackMessage = WM_TRAY_ICON;
-	niData.hIcon = LoadIcon(hInst, MAKEINTRESOURCE(IDI_SMALL));
+    niData.hIcon = LoadIcon(hInst, MAKEINTRESOURCE(IDI_SMALL));
 
     settings.setDevWnd(combo(mainWnd, L"FFB device:", 44, 20));
     settings.setFfbWnd(combo(mainWnd, L"FFB type:", 44, 80));
@@ -1155,15 +1155,15 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow) {
     settings.setCarSpecificWnd(
         checkbox(mainWnd, L" Use car specific settings?", 460, 326)
     );
-	settings.setReduceWhenParkedWnd(
-		checkbox(mainWnd, L" Reduce force when parked?", 460, 420)
-	);
-	settings.setRunOnStartupWnd(
-		checkbox(mainWnd, L" Run on startup?", 460, 520)
-	);
-	settings.setStartMinimisedWnd(
-		checkbox(mainWnd, L" Start minimised?", 460, 560)
-	);
+    settings.setReduceWhenParkedWnd(
+        checkbox(mainWnd, L" Reduce force when parked?", 460, 420)
+    );
+    settings.setRunOnStartupWnd(
+        checkbox(mainWnd, L" Run on startup?", 460, 520)
+    );
+    settings.setStartMinimisedWnd(
+        checkbox(mainWnd, L" Start minimised?", 460, 560)
+    );
 
     int statusParts[] = { 256, 424, 864 };
 
@@ -1186,7 +1186,7 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow) {
     UpdateWindow(mainWnd);
 
     memset(&devFilter, 0, sizeof(devFilter));
-	devFilter.dbcc_classguid = GUID_DEVINTERFACE_HID;
+    devFilter.dbcc_classguid = GUID_DEVINTERFACE_HID;
     devFilter.dbcc_size = sizeof(devFilter);
     devFilter.dbcc_devicetype = DBT_DEVTYP_DEVICEINTERFACE;
     RegisterDeviceNotificationW(mainWnd, &devFilter, DEVICE_NOTIFY_WINDOW_HANDLE);
@@ -1226,18 +1226,18 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                     }
                     else if (HIWORD(wParam) == BN_CLICKED) {
                         bool oldValue = SendMessage((HWND)lParam, BM_GETCHECK, 0, 0) == BST_CHECKED;
-						if ((HWND)lParam == settings.getUse360Wnd())
-							settings.setUse360ForDirect(!oldValue);
-						else if ((HWND)lParam == settings.getExtraLongWnd())
-							settings.setExtraLongLoad(!oldValue);
-						else if ((HWND)lParam == settings.getCarSpecificWnd())
-							settings.setUseCarSpecific(!oldValue, car);
-						else if ((HWND)lParam == settings.getReduceWhenParkedWnd())
-							settings.setReduceWhenParked(!oldValue);
-						else if ((HWND)lParam == settings.getRunOnStartupWnd())
-							settings.setRunOnStartup(!oldValue);
-						else if ((HWND)lParam == settings.getStartMinimisedWnd())
-							settings.setStartMinimised(!oldValue);
+                        if ((HWND)lParam == settings.getUse360Wnd())
+                            settings.setUse360ForDirect(!oldValue);
+                        else if ((HWND)lParam == settings.getExtraLongWnd())
+                            settings.setExtraLongLoad(!oldValue);
+                        else if ((HWND)lParam == settings.getCarSpecificWnd())
+                            settings.setUseCarSpecific(!oldValue, car);
+                        else if ((HWND)lParam == settings.getReduceWhenParkedWnd())
+                            settings.setReduceWhenParked(!oldValue);
+                        else if ((HWND)lParam == settings.getRunOnStartupWnd())
+                            settings.setRunOnStartup(!oldValue);
+                        else if ((HWND)lParam == settings.getStartMinimisedWnd())
+                            settings.setStartMinimised(!oldValue);
                     }
                     return DefWindowProc(hWnd, message, wParam, lParam);
             }
@@ -1264,18 +1264,18 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         }
         break;
 
-		case WM_PRINTCLIENT: {
-			RECT r = { 0 };
-			GetClientRect(hWnd, &r);
-			FillRect((HDC)wParam, &r, CreateSolidBrush(RGB(0xff, 0xff, 0xff)));
-		}
-		break;
+        case WM_PRINTCLIENT: {
+            RECT r = { 0 };
+            GetClientRect(hWnd, &r);
+            FillRect((HDC)wParam, &r, CreateSolidBrush(RGB(0xff, 0xff, 0xff)));
+        }
+        break;
 
-		case WM_SIZE: {
-			SendMessage(statusWnd, WM_SIZE, wParam, lParam);
-			return DefWindowProc(hWnd, message, wParam, lParam);
-		}
-		break;
+        case WM_SIZE: {
+            SendMessage(statusWnd, WM_SIZE, wParam, lParam);
+            return DefWindowProc(hWnd, message, wParam, lParam);
+        }
+        break;
 
         case WM_POWERBROADCAST: {
             int wmId = LOWORD(wParam);
@@ -1291,56 +1291,56 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         break;
 
         case WM_TRAY_ICON: {
-			switch (lParam) {
-				case WM_LBUTTONUP:
-					restore();
-				break;
-				case WM_RBUTTONUP: {
-					HMENU trayMenu = CreatePopupMenu();
-					POINT curPoint;
-					AppendMenuW(trayMenu, MF_STRING, ID_TRAY_EXIT, L"Exit");
-					GetCursorPos(&curPoint);
-					SetForegroundWindow(hWnd);
-					if (
-						TrackPopupMenu(
-							trayMenu, TPM_RETURNCMD | TPM_NONOTIFY,
-							curPoint.x, curPoint.y, 0, hWnd, NULL
-						) == ID_TRAY_EXIT
-					)
-						PostQuitMessage(0);
-					DestroyMenu(trayMenu);
-				}
-				break;
-			}
-					
+            switch (lParam) {
+                case WM_LBUTTONUP:
+                    restore();
+                break;
+                case WM_RBUTTONUP: {
+                    HMENU trayMenu = CreatePopupMenu();
+                    POINT curPoint;
+                    AppendMenuW(trayMenu, MF_STRING, ID_TRAY_EXIT, L"Exit");
+                    GetCursorPos(&curPoint);
+                    SetForegroundWindow(hWnd);
+                    if (
+                        TrackPopupMenu(
+                            trayMenu, TPM_RETURNCMD | TPM_NONOTIFY,
+                            curPoint.x, curPoint.y, 0, hWnd, NULL
+                        ) == ID_TRAY_EXIT
+                    )
+                        PostQuitMessage(0);
+                    DestroyMenu(trayMenu);
+                }
+                break;
+            }
+                    
         }
         break;
 
-		case WM_DEVICECHANGE: {
-			DEV_BROADCAST_HDR *hdr = (DEV_BROADCAST_HDR *)lParam;
-			if (wParam != DBT_DEVICEARRIVAL && wParam != DBT_DEVICEREMOVECOMPLETE)
-				return 0;
-			if (hdr->dbch_devicetype != DBT_DEVTYP_DEVICEINTERFACE)
-				return 0;
-			enumDirectInput();
-			if (!settings.isFfbDevicePresent())
-				releaseDirectInput();
-		}
+        case WM_DEVICECHANGE: {
+            DEV_BROADCAST_HDR *hdr = (DEV_BROADCAST_HDR *)lParam;
+            if (wParam != DBT_DEVICEARRIVAL && wParam != DBT_DEVICEREMOVECOMPLETE)
+                return 0;
+            if (hdr->dbch_devicetype != DBT_DEVTYP_DEVICEINTERFACE)
+                return 0;
+            enumDirectInput();
+            if (!settings.isFfbDevicePresent())
+                releaseDirectInput();
+        }
         break;
 
-		case WM_SYSCOMMAND: {
-			switch (wParam & 0xfff0) {
-				case SC_MINIMIZE:
-					minimise();
-					return 0;
-				default:
-					return DefWindowProc(hWnd, message, wParam, lParam);
-			}
-		}
-		break;
+        case WM_SYSCOMMAND: {
+            switch (wParam & 0xfff0) {
+                case SC_MINIMIZE:
+                    minimise();
+                    return 0;
+                default:
+                    return DefWindowProc(hWnd, message, wParam, lParam);
+            }
+        }
+        break;
 
         case WM_DESTROY: {
-			Shell_NotifyIcon(NIM_DELETE, &niData);
+            Shell_NotifyIcon(NIM_DELETE, &niData);
             releaseAll();
             if (settings.getUseCarSpecific() && car[0] != 0)
                 settings.writeSettingsForCar(car);
@@ -1490,12 +1490,12 @@ void initDirectInput() {
     HRESULT hr;
 
     numButtons = numPov = 0;
-	di.dwSize = sizeof(DIDEVICEINSTANCE);
+    di.dwSize = sizeof(DIDEVICEINSTANCE);
 
-	if (ffdevice && effect && ffdevice->GetDeviceInfo(&di) >= 0 && di.guidInstance == settings.getFfbDevice())
-		return;
+    if (ffdevice && effect && ffdevice->GetDeviceInfo(&di) >= 0 && di.guidInstance == settings.getFfbDevice())
+        return;
 
-	releaseDirectInput();
+    releaseDirectInput();
 
     if (
         FAILED(
@@ -1548,7 +1548,7 @@ void initDirectInput() {
         return;
     }
 
-	text(L"Acquired DI device with %d buttons and %d POV", numButtons, numPov);
+    text(L"Acquired DI device with %d buttons and %d POV", numButtons, numPov);
 
     if (FAILED(ffdevice->CreateEffect(GUID_Sine, &dieff, &effect, nullptr))) {
         text(L"Failed to create sine periodic effect");
@@ -1568,21 +1568,21 @@ void initDirectInput() {
 
 void releaseDirectInput() {
 
-	if (effect) {
-		setFFB(0);
-		effect->Stop();
-		effect->Release();
-		effect = nullptr;
-	}
-	if (ffdevice) {
-		ffdevice->Unacquire();
-		ffdevice->Release();
-		ffdevice = nullptr;
-	}
-	if (pDI) {
-		pDI->Release();
-		pDI = nullptr;
-	}
+    if (effect) {
+        setFFB(0);
+        effect->Stop();
+        effect->Release();
+        effect = nullptr;
+    }
+    if (ffdevice) {
+        ffdevice->Unacquire();
+        ffdevice->Release();
+        ffdevice = nullptr;
+    }
+    if (pDI) {
+        pDI->Release();
+        pDI = nullptr;
+    }
 
 }
 
@@ -1750,7 +1750,7 @@ void initAll() {
 
 void releaseAll() {
 
-	releaseDirectInput();
+    releaseDirectInput();
 
     if (fan)
         fan->setSpeed(0);

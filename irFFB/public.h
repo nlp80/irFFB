@@ -122,11 +122,9 @@ DEFINE_GUID(GUID_DEVINTERFACE_VJOY, 0x781EF630, 0x72B2, 0x11d2, 0xB8, 0x52, 0x00
 
 #ifndef __HIDPORT_H__
 // Copied from hidport.h
-#define IOCTL_HID_SET_FEATURE	0xB0191
 #define IOCTL_HID_WRITE_REPORT	0xB000F
 
 #define MAX_N_DEVICES	16 // Maximum number of vJoy devices
-
 
 typedef struct _HID_DEVICE_ATTRIBUTES {
 

@@ -291,7 +291,8 @@ DWORD WINAPI directFFBThread(LPVOID lParam) {
         }
             
         prod[0] = s * firc6[0];
-        r = (int)(prod[0] + prod[1] + prod[2] + prod[3] + prod[4] + prod[5]) + scaleTorque(yawForce[0]);
+        r = (int)(prod[0] + prod[1] + prod[2] + prod[3] + prod[4] + prod[5]) +
+                scaleTorque(yawForce[0]);
 
         if (use360)
             r += scaleTorque(suspForceST[0]);
@@ -301,7 +302,8 @@ DWORD WINAPI directFFBThread(LPVOID lParam) {
         for (int i = 1; i < DIRECT_INTERP_SAMPLES; i++) {
 
             prod[i] = s * firc6[i];
-            r = (int)(prod[0] + prod[1] + prod[2] + prod[3] + prod[4] + prod[5]) + scaleTorque(yawForce[i]);
+            r = (int)(prod[0] + prod[1] + prod[2] + prod[3] + prod[4] + prod[5]) +
+                    scaleTorque(yawForce[i]);
 
             if (use360)
                 r += scaleTorque(suspForceST[i]);
@@ -901,7 +903,9 @@ int APIENTRY wWinMain(
 
             for (int i = 0; i < DIRECT_INTERP_SAMPLES; i++) {
                 yawFilter[i] = yaw * firc6[i];
-                yawForce[i] = yawFilter[0] + yawFilter[1] + yawFilter[2] + yawFilter[3] + yawFilter[4] + yawFilter[5];
+                yawForce[i] =
+                    yawFilter[0] + yawFilter[1] + yawFilter[2] +
+                        yawFilter[3] + yawFilter[4] + yawFilter[5];
             }
 
             if (*isOnTrack)
@@ -947,7 +951,11 @@ int APIENTRY wWinMain(
                         setFFB(scaleTorque(swTorqueST[i] + suspForceST[i] + yawForce[i]));
                         sleepSpinUntil(&start, 2000, 2760 * (i + 1));
                     }
-                    setFFB(scaleTorque(swTorqueST[STmaxIdx] + suspForceST[STmaxIdx] + yawForce[STmaxIdx]));
+                    setFFB(
+                        scaleTorque(
+                            swTorqueST[STmaxIdx] + suspForceST[STmaxIdx] + yawForce[STmaxIdx]
+                        )
+                    );
 
                 }
                 break;
@@ -958,7 +966,11 @@ int APIENTRY wWinMain(
                     float sdiff = (suspForceST[0] - lastSuspForce) / 2.0f;
                     int force, iMax = STmaxIdx << 1;
 
-                    setFFB(scaleTorque(lastTorque + diff + lastSuspForce + sdiff + yawForce[0]));
+                    setFFB(
+                        scaleTorque(
+                            lastTorque + diff + lastSuspForce + sdiff + yawForce[0]
+                        )
+                    );
 
                     for (int i = 0; i < iMax; i++) {
 
@@ -967,10 +979,17 @@ int APIENTRY wWinMain(
                         if (i & 1) {
                             diff = (swTorqueST[idx + 1] - swTorqueST[idx]) / 2.0f;
                             sdiff = (suspForceST[idx + 1] - suspForceST[idx]) / 2.0f;
-                            force = scaleTorque(swTorqueST[idx] + diff + suspForceST[idx] + sdiff + yawForce[idx]);
+                            force =
+                                scaleTorque(
+                                    swTorqueST[idx] + diff + suspForceST[idx] +
+                                        sdiff + yawForce[idx]
+                                );
                         }
                         else
-                            force = scaleTorque(swTorqueST[idx] + suspForceST[idx] + yawForce[idx]);
+                            force =
+                                scaleTorque(
+                                    swTorqueST[idx] + suspForceST[idx] + yawForce[idx]
+                                );
 
                         sleepSpinUntil(&start, 0, 1380 * (i + 1));
                         setFFB(force);
@@ -978,7 +997,11 @@ int APIENTRY wWinMain(
                     }
 
                     sleepSpinUntil(&start, 0, 1380 * (iMax + 1));
-                    setFFB(scaleTorque(swTorqueST[STmaxIdx] + suspForceST[STmaxIdx] + yawForce[STmaxIdx]));
+                    setFFB(
+                        scaleTorque(
+                            swTorqueST[STmaxIdx] + suspForceST[STmaxIdx] + yawForce[STmaxIdx]
+                        )
+                    );
                     lastTorque = swTorqueST[STmaxIdx];
                     lastSuspForce = suspForceST[STmaxIdx];
 
@@ -1294,7 +1317,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             switch (lParam) {
                 case WM_LBUTTONUP:
                     restore();
-                break;
+                    break;
                 case WM_RBUTTONUP: {
                     HMENU trayMenu = CreatePopupMenu();
                     POINT curPoint;

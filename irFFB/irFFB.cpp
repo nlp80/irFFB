@@ -172,7 +172,6 @@ DWORD WINAPI directFFBThread(LPVOID lParam) {
     float s;
     int r;
     __declspec(align(16)) float prod[12];
-    __declspec(align(16)) float inter[4];
     float lastSuspForce = 0, lastYawForce = 0;
     LARGE_INTEGER start;
 
@@ -214,14 +213,16 @@ DWORD WINAPI directFFBThread(LPVOID lParam) {
                 movaps xmm2, xmmword ptr prod+32
                 addps xmm0, xmm1
                 addps xmm0, xmm2
-                movaps xmmword ptr inter, xmm0
+                haddps xmm0, xmm0
+                haddps xmm0, xmm0
+                cvttss2si eax, xmm0
+                mov dword ptr r, eax
             }
-
-            r = (int)(inter[0] + inter[1] + inter[2] + inter[3]) +
-                    scaleTorque(lastYawForce + (yawForce[0] - lastYawForce) / 2.0f);
 
             if (use360)
                 r += scaleTorque(lastSuspForce + (suspForceST[0] - lastSuspForce) / 2.0f);
+
+            r += scaleTorque(lastYawForce + (yawForce[0] - lastYawForce) / 2.0f);
 
             setFFB(r);
 
@@ -235,10 +236,11 @@ DWORD WINAPI directFFBThread(LPVOID lParam) {
                     movaps xmm2, xmmword ptr prod + 32
                     addps xmm0, xmm1
                     addps xmm0, xmm2
-                    movaps xmmword ptr inter, xmm0
+                    haddps xmm0, xmm0
+                    haddps xmm0, xmm0
+                    cvttss2si eax, xmm0
+                    mov dword ptr r, eax
                 }
-
-                r = (int)(inter[0] + inter[1] + inter[2] + inter[3]);
 
                 int idx = (i - 1) >> 1;
                 bool odd = i & 1;
@@ -270,10 +272,11 @@ DWORD WINAPI directFFBThread(LPVOID lParam) {
                 movaps xmm2, xmmword ptr prod + 32
                 addps xmm0, xmm1
                 addps xmm0, xmm2
-                movaps xmmword ptr inter, xmm0
+                haddps xmm0, xmm0
+                haddps xmm0, xmm0
+                cvttss2si eax, xmm0
+                mov dword ptr r, eax
             }
-
-            r = (int)(inter[0] + inter[1] + inter[2] + inter[3]);
 
             if (use360)
                 r += scaleTorque(suspForceST[DIRECT_INTERP_SAMPLES - 1]);

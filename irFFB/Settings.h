@@ -66,8 +66,10 @@ class Settings {
         int getLoadSetting();
         int getMinForceSetting();
         void writeCarSpecificSetting();
-        void readRegSettings(bool, char *);
+        void readRegSettings(char *);
+        void readGenericSettings();
         void writeRegSettings();
+        void writeGenericSettings();
         void readSettingsForCar(char *);
         void writeSettingsForCar(char *);
 

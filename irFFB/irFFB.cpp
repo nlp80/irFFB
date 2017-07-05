@@ -486,7 +486,8 @@ int APIENTRY wWinMain(
     setCarStatus(car);
     setConnectedStatus(false);
     setOnTrackStatus(false);
-    settings.readRegSettings(true, car);
+    settings.readGenericSettings();
+    settings.readRegSettings(car);
 
     if (settings.getStartMinimised())
         minimise();
@@ -1256,8 +1257,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                             settings.setUse360ForDirect(!oldValue);
                         else if ((HWND)lParam == settings.getExtraLongWnd())
                             settings.setExtraLongLoad(!oldValue);
-                        else if ((HWND)lParam == settings.getCarSpecificWnd())
+                        else if ((HWND)lParam == settings.getCarSpecificWnd()) {
+                            if (!oldValue)
+                                getCarName();
                             settings.setUseCarSpecific(!oldValue, car);
+                        }
                         else if ((HWND)lParam == settings.getReduceWhenParkedWnd())
                             settings.setReduceWhenParked(!oldValue);
                         else if ((HWND)lParam == settings.getRunOnStartupWnd())
@@ -1371,7 +1375,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             if (settings.getUseCarSpecific() && car[0] != 0)
                 settings.writeSettingsForCar(car);
             else
-                settings.writeRegSettings();
+                settings.writeGenericSettings();
+            settings.writeRegSettings();
             exit(0);
         }
         break;

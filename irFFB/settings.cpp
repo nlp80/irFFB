@@ -385,7 +385,6 @@ void Settings::writeRegSettings() {
 
 void Settings::writeGenericSettings() {
 
-    wchar_t *guid;
     HKEY regKey;
     DWORD sz = sizeof(int);
     DWORD bumps = getBumpsSetting();

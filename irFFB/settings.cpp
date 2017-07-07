@@ -217,8 +217,7 @@ void Settings::setRunOnStartup(bool run) {
             text(L"Failed to create startup registry value");
     }
     else
-        if (RegDeleteValueW(regKey, L"irFFB"))
-            text(L"Failed to remove startup registry value");
+        RegDeleteValueW(regKey, L"irFFB");
 
 }
 bool Settings::getRunOnStartup() { return runOnStartup; }

@@ -65,7 +65,9 @@ int force = 0;
 volatile float suspForce = 0; 
 volatile float yawForce[DIRECT_INTERP_SAMPLES];
 __declspec(align(16)) volatile float suspForceST[DIRECT_INTERP_SAMPLES];
-bool stopped = true;
+bool onTrack = false, stopped = true, deviceChangePending = false;
+
+volatile bool reacquireNeeded = false;
 
 int numButtons = 0, numPov = 0, vjButtons = 0, vjPov = 0;
 UINT samples, clippedSamples;
@@ -311,7 +313,7 @@ DWORD WINAPI directFFBThread(LPVOID lParam) {
             if (use360)
                 r += scaleTorque(suspForceST[i]);
 
-            sleepSpinUntil(&start, 2000, 2760 * i);
+            sleepSpinUntil(&start, 1000, 2760 * i);
             setFFB(r);
 
         }
@@ -395,6 +397,16 @@ void clippingReport() {
 
 }
 
+void deviceChange() {
+    if (!onTrack) {
+        enumDirectInput();
+        if (!settings.isFfbDevicePresent())
+            releaseDirectInput();
+    }
+    else
+        deviceChangePending = true;
+}
+
 void minimise() {
     Shell_NotifyIcon(NIM_ADD, &niData);
     ShowWindow(mainWnd, SW_HIDE);
@@ -434,7 +446,7 @@ int APIENTRY wWinMain(
     bool *isOnTrack = nullptr;
     int *trackSurface = nullptr, *gear = nullptr;;
 
-    bool wasOnTrack = false, shockNomSet = false;
+    bool shockNomSet = false;
     int numHandles = 0, dataLen = 0, lastGear = 0;
     int STnumSamples = 0, STmaxIdx = 0;
     float halfSteerMax = 0, lastTorque = 0, lastSuspForce = 0, redline;
@@ -564,7 +576,7 @@ int APIENTRY wWinMain(
             STmaxIdx = STnumSamples - 1;
 
             lastTorque = FshockNom = 0.0f;
-            wasOnTrack = shockNomSet = false;
+            onTrack = shockNomSet = false;
             resetForces();
             irConnected = true;
             timeBeginPeriod(1);
@@ -572,13 +584,9 @@ int APIENTRY wWinMain(
         }
 
         // Try to make sure we've retained our acquisition
-        if (ffdevice) {
-            hr = ffdevice->GetForceFeedbackState(&diState);
-            if (
-                hr == DIERR_INPUTLOST || hr == DIERR_NOTEXCLUSIVEACQUIRED ||
-                hr == DIERR_NOTACQUIRED || diState == DIGFFS_DEVICELOST
-            )
-                reacquireDIDevice();
+        if (ffdevice && reacquireNeeded) {
+			reacquireDIDevice();
+			reacquireNeeded = false;
         }
 
         res = MsgWaitForMultipleObjects(numHandles, handles, FALSE, 1000, QS_ALLINPUT);
@@ -587,23 +595,23 @@ int APIENTRY wWinMain(
 
         if (numHandles > 0 && res == numHandles - 1 && irsdk_getNewData(data)) {
 
-            if (wasOnTrack && !*isOnTrack) {
-                wasOnTrack = false;
-                setOnTrackStatus(false);
+            if (onTrack && !*isOnTrack) {
+                onTrack = false;
+                setOnTrackStatus(onTrack);
                 lastTorque = lastSuspForce = 0.0f;
                 resetForces();
                 fan->setManualSpeed();
                 clippingReport();
             }
 
-            else if (!wasOnTrack && *isOnTrack) {
-                wasOnTrack = true;
+            else if (!onTrack && *isOnTrack) {
+                onTrack = true;
+                setOnTrackStatus(onTrack);
                 RFshockDeflLast = LFshockDeflLast = 
                     LRshockDeflLast = RRshockDeflLast = 
                         CFshockDeflLast = -10000.0f;
                 clippedSamples = samples = lastGear = 0;
                 memset(yawFilter, 0, DIRECT_INTERP_SAMPLES * sizeof(float));
-                setOnTrackStatus(true);
             }
 
             if (jetseat && jetseat->isEnabled()) {
@@ -920,7 +928,11 @@ int APIENTRY wWinMain(
                 lastGear = *gear;
             }
 
-            if (!*isOnTrack || settings.getFfbType() == FFBTYPE_DIRECT_FILTER)
+            if (
+                !*isOnTrack ||
+                settings.getFfbType() == FFBTYPE_DIRECT_FILTER ||
+                settings.getFfbType() == FFBTYPE_DIRECT_FILTER_720
+            )
                 continue;
 
             halfSteerMax = *steerMax / 2.0f;
@@ -953,7 +965,7 @@ int APIENTRY wWinMain(
 
                     for (int i = 0; i < STmaxIdx; i++) {
                         setFFB(scaleTorque(swTorqueST[i] + suspForceST[i] + yawForce[i]));
-                        sleepSpinUntil(&start, 2000, 2760 * (i + 1));
+                        sleepSpinUntil(&start, 1000, 2760 * (i + 1));
                     }
                     setFFB(
                         scaleTorque(
@@ -1026,8 +1038,10 @@ int APIENTRY wWinMain(
                 data = NULL;
             }
             resetForces();
-            setOnTrackStatus(false);
+            onTrack = false;
+            setOnTrackStatus(onTrack);
             setConnectedStatus(false);
+            fan->setManualSpeed();
             timeEndPeriod(1);
             if (settings.getUseCarSpecific() && car[0] != 0) 
                 settings.writeSettingsForCar(car);
@@ -1352,9 +1366,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 return 0;
             if (hdr->dbch_devicetype != DBT_DEVTYP_DEVICEINTERFACE)
                 return 0;
-            enumDirectInput();
-            if (!settings.isFfbDevicePresent())
-                releaseDirectInput();
+            deviceChange();
         }
         break;
 
@@ -1467,6 +1479,9 @@ void setOnTrackStatus(bool onTrack) {
         statusWnd, SB_SETTEXT, STATUS_ONTRACK_PART,
         LPARAM(onTrack ? L"On track" : L"Not on track")
     );
+
+    if (!onTrack && deviceChangePending)
+        deviceChange();
 
 }
 
@@ -1630,7 +1645,7 @@ void reacquireDIDevice() {
     if (effect) {
         hr = effect->SetParameters(&dieff, DIEP_TYPESPECIFICPARAMS | DIEP_START);
         if (hr == DIERR_NOTINITIALIZED || hr == DIERR_INPUTLOST || hr == DIERR_INCOMPLETEEFFECT || hr == DIERR_INVALIDPARAM)
-            text(L"Error setting parameters of DIEFFECT: %d", hr);
+            text(L"Error setting parameters of DIEFFECT: 0x%x", hr);
     }
 
 }
@@ -1659,11 +1674,11 @@ inline void setFFB(int mag) {
     if (!effect)
         return;
 
-    if (mag < -DI_MAX) {
+    if (mag <= -DI_MAX) {
         mag = -DI_MAX;
         clippedSamples++;
     }
-    else if (mag > DI_MAX) {
+    else if (mag >= DI_MAX) {
         mag = DI_MAX;
         clippedSamples++;
     }
@@ -1681,7 +1696,9 @@ inline void setFFB(int mag) {
     }
 
     pforce.lOffset = mag;
-    effect->SetParameters(&dieff, DIEP_TYPESPECIFICPARAMS | DIEP_NORESTART);
+    HRESULT hr = effect->SetParameters(&dieff, DIEP_TYPESPECIFICPARAMS | DIEP_NORESTART);
+	if (hr != DI_OK)
+		reacquireNeeded = true;
 
 }
 

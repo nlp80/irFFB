@@ -585,8 +585,8 @@ int APIENTRY wWinMain(
 
         // Try to make sure we've retained our acquisition
         if (ffdevice && reacquireNeeded) {
-			reacquireDIDevice();
-			reacquireNeeded = false;
+            reacquireDIDevice();
+            reacquireNeeded = false;
         }
 
         res = MsgWaitForMultipleObjects(numHandles, handles, FALSE, 1000, QS_ALLINPUT);
@@ -1698,7 +1698,7 @@ inline void setFFB(int mag) {
     pforce.lOffset = mag;
     HRESULT hr = effect->SetParameters(&dieff, DIEP_TYPESPECIFICPARAMS | DIEP_NORESTART);
 	if (hr != DI_OK)
-		reacquireNeeded = true;
+        reacquireNeeded = true;
 
 }
 

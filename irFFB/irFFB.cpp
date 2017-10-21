@@ -433,8 +433,6 @@ int APIENTRY wWinMain(
     char *data = nullptr;
     bool irConnected = false;
     MSG msg;
-    DWORD diState;
-    HRESULT hr;
 
     float *swTorque = nullptr, *swTorqueST = nullptr, *steer = nullptr, *steerMax = nullptr;
     float *speed = nullptr, *throttle = nullptr, *rpm = nullptr;

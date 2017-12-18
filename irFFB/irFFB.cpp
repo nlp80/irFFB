@@ -123,8 +123,8 @@ DWORD WINAPI readWheelThread(LPVOID lParam) {
             continue;
 
         res = ffdevice->GetDeviceState(sizeof(joyState), &joyState);
-        if (res == DIERR_NOTACQUIRED || res == DIERR_INPUTLOST)
-            continue;
+        if (res != DI_OK)
+            reacquireNeeded = true;
 
         vjData.wAxisX = joyState.lX;
         vjData.wAxisY = joyState.lY;

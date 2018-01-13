@@ -547,9 +547,9 @@ void JetSeat::yawEffect(float f) {
     if (yawGain == 0.0f)
         return;
     if (f > 0.0f)
-        startEffect(GW_SLIDE_LEFT, f * 4.0f * yawGain, 3);
+        startEffect(GW_SLIDE_LEFT, f * 5.0f * yawGain, 3);
     else
-        startEffect(GW_SLIDE_RIGHT, -f * 4.0f * yawGain, 3);
+        startEffect(GW_SLIDE_RIGHT, -f * 5.0f * yawGain, 3);
 }
 
 void JetSeat::readSettings() {

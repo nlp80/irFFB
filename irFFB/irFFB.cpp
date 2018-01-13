@@ -119,12 +119,14 @@ DWORD WINAPI readWheelThread(LPVOID lParam) {
 
         WaitForSingleObject(wheelEvent, INFINITE);
 
-        if (!ffdevice)
+        if (!ffdevice || reacquireNeeded)
             continue;
 
         res = ffdevice->GetDeviceState(sizeof(joyState), &joyState);
-        if (res == DIERR_NOTACQUIRED || res == DIERR_INPUTLOST)
+        if (res != DI_OK) {
+            reacquireNeeded = true;
             continue;
+        }
 
         vjData.wAxisX = joyState.lX;
         vjData.wAxisY = joyState.lY;
@@ -313,7 +315,7 @@ DWORD WINAPI directFFBThread(LPVOID lParam) {
             if (use360)
                 r += scaleTorque(suspForceST[i]);
 
-            sleepSpinUntil(&start, 1000, 2760 * i);
+            sleepSpinUntil(&start, 2000, 2760 * i);
             setFFB(r);
 
         }
@@ -637,9 +639,12 @@ int APIENTRY wWinMain(
                     float r = *vY / *vX;
                     float sa, asa, ar = abs(r);
 
+                    if (*vX < 0.0f)
+                        r = -r;
+
                     if (ar > 1.0f) {
-                        yaw = csignf(halfMaxForce, r);
-                        sa = csignf(0.25f, r);
+                        sa = csignf(0.785f, r);
+                        yaw = csignf(halfMaxForce, r);                        
                     }
                     else {
                         sa = 0.78539816339745f * r + 0.273f * r * (1.0f - ar);
@@ -831,7 +836,7 @@ int APIENTRY wWinMain(
                             float RFd = RFshockDeflST[STmaxIdx] - RFshockDeflLast;
 
                             if (LFd > 0.0025f || RFd > 0.0025f)
-                                jetseat->fBumpEffect(LFd * 200.0f, RFd * 200.0f);
+                                jetseat->fBumpEffect(LFd * 220.0f, RFd * 220.0f);
                         }
                         
                     }
@@ -878,7 +883,7 @@ int APIENTRY wWinMain(
                         if (jetseat && jetseat->isEnabled()) {
                             float CFd = CFshockDeflST[STmaxIdx] - CFshockDeflLast;
                             if  (CFd > 0.0025f)
-                                jetseat->fBumpEffect(CFd * 200.0f, CFd * 200.0f);
+                                jetseat->fBumpEffect(CFd * 220.0f, CFd * 220.0f);
                         }
 
                     }
@@ -892,7 +897,7 @@ int APIENTRY wWinMain(
                     float RRd = RRshockDeflST[STmaxIdx] - RRshockDeflLast;
 
                     if (LRd > 0.0025f || RRd > 0.0025f)
-                        jetseat->rBumpEffect(LRd * 200.0f, RRd * 200.0f);
+                        jetseat->rBumpEffect(LRd * 220.0f, RRd * 220.0f);
 
                     LRshockDeflLast = LRshockDeflST[STmaxIdx];
                     RRshockDeflLast = RRshockDeflST[STmaxIdx];
@@ -963,7 +968,7 @@ int APIENTRY wWinMain(
 
                     for (int i = 0; i < STmaxIdx; i++) {
                         setFFB(scaleTorque(swTorqueST[i] + suspForceST[i] + yawForce[i]));
-                        sleepSpinUntil(&start, 1000, 2760 * (i + 1));
+                        sleepSpinUntil(&start, 2000, 2760 * (i + 1));
                     }
                     setFFB(
                         scaleTorque(

@@ -424,7 +424,6 @@ void Fan::setManualSpeed() {
     setSpeed(manualSpeed * maxSpeedMs / 100);
 }
 
-
 void Fan::readSettings() {
 
     HKEY regKey;

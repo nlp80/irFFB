@@ -1599,6 +1599,36 @@ void initDirectInput() {
 
     text(L"Acquired DI device with %d buttons and %d POV", numButtons, numPov);
 
+    DIPROPDWORD dipdw;
+    dipdw.diph.dwSize = sizeof(DIPROPDWORD);
+    dipdw.diph.dwHeaderSize = sizeof(DIPROPHEADER);
+    dipdw.diph.dwObj = 0; // device property 
+    dipdw.diph.dwHow = DIPH_DEVICE;
+
+    hr = ffdevice->GetProperty(DIPROP_VIDPID, &dipdw.diph);
+    if (SUCCEEDED(hr) && LOWORD(dipdw.dwData) == 0x046d) {
+
+        int prodId = HIWORD(dipdw.dwData);
+
+        UINT msgId = RegisterWindowMessage(L"LGS_Msg_SetOperatingRange");
+        if (!msgId)
+            goto CREATEEFFECT;
+
+        HWND LGSmsgHandler =
+            FindWindow(
+                L"LCore_MessageHandler_{C464822E-04D1-4447-B918-6D5EB33E0E5D}",
+                NULL
+            );
+
+        if (LGSmsgHandler == NULL)
+            goto CREATEEFFECT;
+
+        SendMessage(LGSmsgHandler, msgId, prodId, 900);
+
+    }
+
+CREATEEFFECT:
+
     if (FAILED(ffdevice->CreateEffect(GUID_Sine, &dieff, &effect, nullptr))) {
         text(L"Failed to create sine periodic effect");
         return;

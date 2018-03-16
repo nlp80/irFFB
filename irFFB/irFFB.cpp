@@ -47,6 +47,9 @@ LONG  dir[1]  = { 0 };
 DIPERIODIC pforce;
 DIEFFECT   dieff;
 
+LogiLedData logiLedData;
+DIEFFESCAPE logiEscape;
+
 Settings settings;
 JetSeat *jetseat;
 Fan *fan;
@@ -65,7 +68,7 @@ int force = 0;
 volatile float suspForce = 0; 
 volatile float yawForce[DIRECT_INTERP_SAMPLES];
 __declspec(align(16)) volatile float suspForceST[DIRECT_INTERP_SAMPLES];
-bool onTrack = false, stopped = true, deviceChangePending = false;
+bool onTrack = false, stopped = true, deviceChangePending = false, logiWheel = false;
 
 volatile bool reacquireNeeded = false;
 
@@ -378,14 +381,14 @@ float getCarRedline() {
     if (parseYaml(irsdk_getSessionInfoStr(), "DriverInfo:DriverCarRedLine:", &ptr, &len)) {
 
         if (len < 0 || len > sizeof(buf) - 1)
-            return 8000;
+            return 8000.0f;
         
         memcpy(buf, ptr, len);
         buf[len] = 0;
         return strtof(buf, NULL);
     }
     
-    return 8000;
+    return 8000.0f;
 
 }
 
@@ -396,6 +399,16 @@ void clippingReport() {
     if (clippedPerCent > 10)
         text(L"Consider increasing Max force to reduce clipping");
     samples = clippedSamples = 0;
+
+}
+
+void logiRpmLed(float *rpm, float redline) {
+
+    logiLedData.rpmData.rpm = *rpm / redline;
+    logiLedData.rpmData.rpmFirstLed = 0.65f;
+    logiLedData.rpmData.rpmRedLine = 1.0f;
+
+    ffdevice->Escape(&logiEscape);
 
 }
 
@@ -484,6 +497,15 @@ int APIENTRY wWinMain(
     dieff.lpvTypeSpecificParams = &pforce;
     dieff.dwStartDelay = 0;
 
+    ZeroMemory(&logiLedData, sizeof(logiLedData));
+    logiLedData.size = sizeof(logiLedData);
+    logiLedData.version = 1;
+    ZeroMemory(&logiEscape, sizeof(logiEscape));
+    logiEscape.dwSize = sizeof(DIEFFESCAPE);
+    logiEscape.dwCommand = 0;
+    logiEscape.lpvInBuffer = &logiLedData;
+    logiEscape.cbInBuffer = sizeof(logiLedData);
+
     if (!InitInstance(hInstance, nCmdShow))
         return FALSE;
 
@@ -548,6 +570,8 @@ int APIENTRY wWinMain(
                 setCarStatus(nullptr);
     
             redline = getCarRedline();
+
+            text(L"Redline is %f", redline);
 
             // Inform iRacing of the maxForce setting
             irsdk_broadcastMsg(irsdk_BroadcastFFBCommand, irsdk_FFBCommand_MaxForce, (float)settings.getMaxForce());
@@ -622,6 +646,9 @@ int APIENTRY wWinMain(
                 else                
                     jetseat->stopEngineEffect();
             }
+
+            if (ffdevice && logiWheel)
+                logiRpmLed(rpm, redline);
 
             yaw = 0;
 
@@ -1602,17 +1629,22 @@ void initDirectInput() {
     DIPROPDWORD dipdw;
     dipdw.diph.dwSize = sizeof(DIPROPDWORD);
     dipdw.diph.dwHeaderSize = sizeof(DIPROPHEADER);
-    dipdw.diph.dwObj = 0; // device property 
+    dipdw.diph.dwObj = 0;
     dipdw.diph.dwHow = DIPH_DEVICE;
 
     hr = ffdevice->GetProperty(DIPROP_VIDPID, &dipdw.diph);
     if (SUCCEEDED(hr) && LOWORD(dipdw.dwData) == 0x046d) {
 
+        logiWheel = true;
         int prodId = HIWORD(dipdw.dwData);
 
+        text(L"Detected Logitech wheel, attempting to set range to 900");
+
         UINT msgId = RegisterWindowMessage(L"LGS_Msg_SetOperatingRange");
-        if (!msgId)
+        if (!msgId) {
+            text(L"Failed to register LGS window message");
             goto CREATEEFFECT;
+        }
 
         HWND LGSmsgHandler =
             FindWindow(
@@ -1620,11 +1652,18 @@ void initDirectInput() {
                 NULL
             );
 
-        if (LGSmsgHandler == NULL)
+        if (LGSmsgHandler == NULL) {
+            text(L"Failed to locate LGS msg handler");
             goto CREATEEFFECT;
+        }
+        SendMessageW(LGSmsgHandler, msgId, prodId, 900);
 
-        SendMessage(LGSmsgHandler, msgId, prodId, 900);
 
+    }
+    else {
+        if (SUCCEEDED(hr))
+            text(L"Wheel VID is 0x%x", HIWORD(dipdw.dwData));
+        logiWheel = false;
     }
 
 CREATEEFFECT:

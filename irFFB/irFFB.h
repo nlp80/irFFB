@@ -59,6 +59,18 @@ typedef struct sWins {
     HWND value;
 } sWins_t;
 
+struct LogiRpmData {
+    float rpm;
+    float rpmFirstLed;
+    float rpmRedLine;
+};
+
+struct LogiLedData {
+    DWORD size;
+    DWORD version;
+    LogiRpmData rpmData;
+};
+
 DWORD WINAPI readWheelThread(LPVOID);
 DWORD WINAPI directFFBThread(LPVOID);
 

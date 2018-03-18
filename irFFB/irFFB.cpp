@@ -1619,13 +1619,6 @@ void initDirectInput() {
         return;
     }
 
-    if (FAILED(ffdevice->Acquire())) {
-        text(L"Failed to acquire DI device");
-        return;
-    }
-
-    text(L"Acquired DI device with %d buttons and %d POV", numButtons, numPov);
-
     DIPROPDWORD dipdw;
     dipdw.diph.dwSize = sizeof(DIPROPDWORD);
     dipdw.diph.dwHeaderSize = sizeof(DIPROPHEADER);
@@ -1638,12 +1631,12 @@ void initDirectInput() {
         logiWheel = true;
         int prodId = HIWORD(dipdw.dwData);
 
-        text(L"Detected Logitech wheel, attempting to set range to 900");
+        text(L"Logitech wheel detected, attempting to set range to 900 deg");
 
         UINT msgId = RegisterWindowMessage(L"LGS_Msg_SetOperatingRange");
         if (!msgId) {
-            text(L"Failed to register LGS window message");
-            goto CREATEEFFECT;
+            text(L"Failed to register LGS window message, can't set range");
+            goto ACQUIRE;
         }
 
         HWND LGSmsgHandler =
@@ -1653,20 +1646,24 @@ void initDirectInput() {
             );
 
         if (LGSmsgHandler == NULL) {
-            text(L"Failed to locate LGS msg handler");
-            goto CREATEEFFECT;
+            text(L"Failed to locate LGS msg handler, can't set range");
+            goto ACQUIRE;
         }
         SendMessageW(LGSmsgHandler, msgId, prodId, 900);
 
 
     }
-    else {
-        if (SUCCEEDED(hr))
-            text(L"Wheel VID is 0x%x", HIWORD(dipdw.dwData));
+    else
         logiWheel = false;
+
+ACQUIRE:
+
+    if (FAILED(ffdevice->Acquire())) {
+        text(L"Failed to acquire DI device");
+        return;
     }
 
-CREATEEFFECT:
+    text(L"Acquired DI device with %d buttons and %d POV", numButtons, numPov);
 
     if (FAILED(ffdevice->CreateEffect(GUID_Sine, &dieff, &effect, nullptr))) {
         text(L"Failed to create sine periodic effect");

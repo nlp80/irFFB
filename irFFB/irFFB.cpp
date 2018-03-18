@@ -571,8 +571,6 @@ int APIENTRY wWinMain(
     
             redline = getCarRedline();
 
-            text(L"Redline is %f", redline);
-
             // Inform iRacing of the maxForce setting
             irsdk_broadcastMsg(irsdk_BroadcastFFBCommand, irsdk_FFBCommand_MaxForce, (float)settings.getMaxForce());
 

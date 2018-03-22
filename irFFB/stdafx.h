@@ -25,6 +25,8 @@
 #include <xmmintrin.h>
 #include <commctrl.h>
 #include <hidclass.h>
+#include <hidsdi.h>
+#include <SetupAPI.h>
 
 #define DIRECTINPUT_VERSION 0x0800 
 #include <dinput.h>

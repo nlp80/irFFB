@@ -1513,6 +1513,128 @@ void setOnTrackStatus(bool onTrack) {
 
 }
 
+void configLogiWheel() {
+
+    DIPROPDWORD dipdw;
+    dipdw.diph.dwSize = sizeof(DIPROPDWORD);
+    dipdw.diph.dwHeaderSize = sizeof(DIPROPHEADER);
+    dipdw.diph.dwObj = 0;
+    dipdw.diph.dwHow = DIPH_DEVICE;
+
+    int prodId = HIWORD(dipdw.dwData);
+    text(L"Found Logitech wheel with prodId: 0x%x", prodId);
+
+    if (prodId == G25PID || prodId == DFGTPID || prodId == G27PID) {
+
+        GUID hidGuid;
+        HidD_GetHidGuid(&hidGuid);
+
+        text(L"DFGT/G25/G27 detected, setting range using raw HID");
+
+        HANDLE devInfoSet = SetupDiGetClassDevsW(&hidGuid, NULL, NULL, DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
+        if (devInfoSet == INVALID_HANDLE_VALUE) {
+            text(L"Error enumerating HID devices, can't set Logitech wheel range");
+            return;
+        }
+
+        SP_DEVICE_INTERFACE_DATA intfData;
+        SP_DEVICE_INTERFACE_DETAIL_DATA *intfDetail;
+        DWORD idx = 0;
+        DWORD error = 0;
+        DWORD size;
+
+        while (true) {
+
+            intfData.cbSize = sizeof(SP_DEVICE_INTERFACE_DATA);
+
+            if (!SetupDiEnumDeviceInterfaces(devInfoSet, NULL, &hidGuid, idx++, &intfData)) {
+                if (GetLastError() == ERROR_NO_MORE_ITEMS) {
+                    break;
+                }
+                continue;
+            }
+
+            if (!SetupDiGetDeviceInterfaceDetailW(devInfoSet, &intfData, NULL, 0, &size, NULL))
+                if (GetLastError() != ERROR_INSUFFICIENT_BUFFER) {
+                    text(L"Error getting intf detail");
+                    continue;
+                }
+
+            intfDetail = (SP_DEVICE_INTERFACE_DETAIL_DATA *)malloc(size);
+            intfDetail->cbSize = sizeof(SP_DEVICE_INTERFACE_DETAIL_DATA);
+
+            if (!SetupDiGetDeviceInterfaceDetailW(devInfoSet, &intfData, intfDetail, size, NULL, NULL)) {
+                free(intfDetail);
+                continue;
+            }
+
+            if (
+                wcsstr(intfDetail->DevicePath, G25PATH) != NULL ||
+                wcsstr(intfDetail->DevicePath, DFGTPATH) != NULL ||
+                wcsstr(intfDetail->DevicePath, G27PATH) != NULL
+                ) {
+
+                HANDLE file = CreateFileW(
+                    intfDetail->DevicePath,
+                    GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                    NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL
+                );
+
+                if (file == INVALID_HANDLE_VALUE) {
+                    text(L"Failed to open Logitech HID device, can't set range");
+                    free(intfDetail);
+                    SetupDiDestroyDeviceInfoList(devInfoSet);
+                    return;
+                }
+
+                DWORD written;
+
+                if (!WriteFile(file, "\x00\xf8\x81\x84\x03\x00\x00\x00\x00", 9, &written, NULL))
+                    text(L"Failed to write to Logitech HID device, can't set range");
+                else
+                    text(L"Range of Logitech wheel set to 900 deg via raw HID");
+
+                CloseHandle(file);
+                free(intfDetail);
+                SetupDiDestroyDeviceInfoList(devInfoSet);
+                return;
+
+            }
+
+            free(intfDetail);
+
+        }
+
+        text(L"Failed to locate Logitech wheel HID device, can't set range");
+        SetupDiDestroyDeviceInfoList(devInfoSet);
+        return;
+
+    }
+
+    text(L"Attempting to set range via LGS");
+
+    UINT msgId = RegisterWindowMessage(L"LGS_Msg_SetOperatingRange");
+    if (!msgId) {
+        text(L"Failed to register LGS window message, can't set range..");
+        return;
+    }
+
+    HWND LGSmsgHandler =
+        FindWindowW(
+            L"LCore_MessageHandler_{C464822E-04D1-4447-B918-6D5EB33E0E5D}",
+            NULL
+        );
+
+    if (LGSmsgHandler == NULL) {
+        text(L"Failed to locate LGS msg handler, can't set range..");
+        return;
+    }
+
+    SendMessageW(LGSmsgHandler, msgId, prodId, 900);
+    text(L"Range of Logitech wheel set to 900 deg via LGS");
+
+}
+
 BOOL CALLBACK EnumFFDevicesCallback(LPCDIDEVICEINSTANCE diDevInst, VOID *wnd) {
 
     UNREFERENCED_PARAMETER(wnd);
@@ -1521,7 +1643,7 @@ BOOL CALLBACK EnumFFDevicesCallback(LPCDIDEVICEINSTANCE diDevInst, VOID *wnd) {
         return true;
 
     settings.addFfbDevice(diDevInst->guidInstance, diDevInst->tszProductName);
-    
+
     return true;
 
 }
@@ -1546,7 +1668,7 @@ void enumDirectInput() {
                 (VOID **)&pDI, nullptr
             )
         )
-    ) {
+        ) {
         text(L"Failed to initialise DirectInput");
         return;
     }
@@ -1578,7 +1700,7 @@ void initDirectInput() {
                 (VOID **)&pDI, nullptr
             )
         )
-    ) {
+        ) {
         text(L"Failed to initialise DirectInput");
         return;
     }
@@ -1625,36 +1747,11 @@ void initDirectInput() {
 
     hr = ffdevice->GetProperty(DIPROP_VIDPID, &dipdw.diph);
     if (SUCCEEDED(hr) && LOWORD(dipdw.dwData) == 0x046d) {
-
         logiWheel = true;
-        int prodId = HIWORD(dipdw.dwData);
-
-        text(L"Logitech wheel detected, attempting to set range to 900 deg");
-
-        UINT msgId = RegisterWindowMessage(L"LGS_Msg_SetOperatingRange");
-        if (!msgId) {
-            text(L"Failed to register LGS window message, can't set range");
-            goto ACQUIRE;
-        }
-
-        HWND LGSmsgHandler =
-            FindWindow(
-                L"LCore_MessageHandler_{C464822E-04D1-4447-B918-6D5EB33E0E5D}",
-                NULL
-            );
-
-        if (LGSmsgHandler == NULL) {
-            text(L"Failed to locate LGS msg handler, can't set range");
-            goto ACQUIRE;
-        }
-        SendMessageW(LGSmsgHandler, msgId, prodId, 900);
-
-
+        configLogiWheel();
     }
     else
         logiWheel = false;
-
-ACQUIRE:
 
     if (FAILED(ffdevice->Acquire())) {
         text(L"Failed to acquire DI device");
@@ -1676,7 +1773,7 @@ ACQUIRE:
     hr = effect->SetParameters(&dieff, DIEP_TYPESPECIFICPARAMS | DIEP_START);
     if (hr == DIERR_NOTINITIALIZED || hr == DIERR_INPUTLOST || hr == DIERR_INCOMPLETEEFFECT || hr == DIERR_INVALIDPARAM)
         text(L"Error setting parameters of DIEFFECT: %d", hr);
-        
+
 }
 
 void releaseDirectInput() {

@@ -46,6 +46,14 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define WM_TRAY_ICON WM_USER+1
 #define ID_TRAY_EXIT 40000
 
+#define G25PID  0xc299
+#define DFGTPID 0xc29a
+#define G27PID  0xc29b
+
+#define G25PATH  L"vid_046d&pid_c299"
+#define DFGTPATH L"vid_046d&pid_c29a"
+#define G27PATH  L"vid_046d&pid_c29b"
+
 enum ffbType {
     FFBTYPE_360HZ,
     FFBTYPE_360HZ_INTERP,

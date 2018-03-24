@@ -1513,15 +1513,8 @@ void setOnTrackStatus(bool onTrack) {
 
 }
 
-void configLogiWheel() {
+void configLogiWheel(short prodId) {
 
-    DIPROPDWORD dipdw;
-    dipdw.diph.dwSize = sizeof(DIPROPDWORD);
-    dipdw.diph.dwHeaderSize = sizeof(DIPROPHEADER);
-    dipdw.diph.dwObj = 0;
-    dipdw.diph.dwHow = DIPH_DEVICE;
-
-    int prodId = HIWORD(dipdw.dwData);
     text(L"Found Logitech wheel with prodId: 0x%x", prodId);
 
     if (prodId == G25PID || prodId == DFGTPID || prodId == G27PID) {
@@ -1548,9 +1541,8 @@ void configLogiWheel() {
             intfData.cbSize = sizeof(SP_DEVICE_INTERFACE_DATA);
 
             if (!SetupDiEnumDeviceInterfaces(devInfoSet, NULL, &hidGuid, idx++, &intfData)) {
-                if (GetLastError() == ERROR_NO_MORE_ITEMS) {
+                if (GetLastError() == ERROR_NO_MORE_ITEMS)
                     break;
-                }
                 continue;
             }
 
@@ -1572,7 +1564,7 @@ void configLogiWheel() {
                 wcsstr(intfDetail->DevicePath, G25PATH) != NULL ||
                 wcsstr(intfDetail->DevicePath, DFGTPATH) != NULL ||
                 wcsstr(intfDetail->DevicePath, G27PATH) != NULL
-                ) {
+            ) {
 
                 HANDLE file = CreateFileW(
                     intfDetail->DevicePath,
@@ -1746,9 +1738,9 @@ void initDirectInput() {
     dipdw.diph.dwHow = DIPH_DEVICE;
 
     hr = ffdevice->GetProperty(DIPROP_VIDPID, &dipdw.diph);
-    if (SUCCEEDED(hr) && LOWORD(dipdw.dwData) == 0x046d) {
+    if (SUCCEEDED(hr) && (LOWORD(dipdw.dwData) == 0x046d)) {
         logiWheel = true;
-        configLogiWheel();
+        configLogiWheel(HIWORD(dipdw.dwData));
     }
     else
         logiWheel = false;

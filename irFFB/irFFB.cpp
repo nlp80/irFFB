@@ -403,8 +403,8 @@ void clippingReport() {
 }
 
 void logiRpmLed(float *rpm, float redline) {
-
-    logiLedData.rpmData.rpm = *rpm / redline;
+    
+    logiLedData.rpmData.rpm = *rpm / (redline * 0.90f);
     logiLedData.rpmData.rpmFirstLed = 0.65f;
     logiLedData.rpmData.rpmRedLine = 1.0f;
 
@@ -1513,9 +1513,9 @@ void setOnTrackStatus(bool onTrack) {
 
 }
 
-void configLogiWheel(short prodId) {
+void configLogiWheel(WORD prodId) {
 
-    text(L"Found Logitech wheel with prodId: 0x%x", prodId);
+    text(L"Found Logitech wheel with prodId: 0x%hx", prodId);
 
     if (prodId == G25PID || prodId == DFGTPID || prodId == G27PID) {
 

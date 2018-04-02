@@ -19,6 +19,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "Settings.h"
 #include "jetseat.h"
 #include "fan.h"
+#include "hidguardian.h"
 #include "public.h"
 #include "yaml_parser.h"
 #include "vjoyinterface.h"
@@ -53,6 +54,7 @@ DIEFFESCAPE logiEscape;
 Settings settings;
 JetSeat *jetseat;
 Fan *fan;
+HidGuardian *hidGuardian;
 
 float firc6[] = { 
     0.0777116f, 0.2607993f, 0.3240389f, 0.2332305f, 0.0903209f, 0.0135009f 
@@ -65,10 +67,13 @@ float firc12[] = {
 char car[MAX_CAR_NAME];
 
 int force = 0;
-volatile float suspForce = 0; 
+volatile float suspForce = 0.0f; 
 volatile float yawForce[DIRECT_INTERP_SAMPLES];
+volatile float wheelVel = 0.0f;
 __declspec(align(16)) volatile float suspForceST[DIRECT_INTERP_SAMPLES];
 bool onTrack = false, stopped = true, deviceChangePending = false, logiWheel = false;
+
+bool elevated = false;
 
 volatile bool reacquireNeeded = false;
 
@@ -422,6 +427,21 @@ void deviceChange() {
         deviceChangePending = true;
 }
 
+DWORD getDeviceVidPid(LPDIRECTINPUTDEVICE8 dev) {
+
+    DIPROPDWORD dipdw;
+    dipdw.diph.dwSize = sizeof(DIPROPDWORD);
+    dipdw.diph.dwHeaderSize = sizeof(DIPROPHEADER);
+    dipdw.diph.dwObj = 0;
+    dipdw.diph.dwHow = DIPH_DEVICE;
+
+    if (!SUCCEEDED(dev->GetProperty(DIPROP_VIDPID, &dipdw.diph)))
+        return 0;
+
+    return dipdw.dwData;
+
+}
+
 void minimise() {
     Shell_NotifyIcon(NIM_ADD, &niData);
     ShowWindow(mainWnd, SW_HIDE);
@@ -441,6 +461,22 @@ int APIENTRY wWinMain(
 
     UNREFERENCED_PARAMETER(hPrevInstance);
     UNREFERENCED_PARAMETER(lpCmdLine);
+
+    if (StrStrW(lpCmdLine, L"service")) {
+
+        SERVICE_TABLE_ENTRYW SvcDispatchTable[] = {
+            { SVCNAME, (LPSERVICE_MAIN_FUNCTION)HidGuardian::SvcMain },
+            { NULL, NULL }
+        };
+
+        if (!StartServiceCtrlDispatcherW(SvcDispatchTable)) {
+            HidGuardian::svcReportError(L"Failed to start service ctrl dispatcher");
+            exit(1);
+        }
+
+        exit(0);
+
+    }
 
     INITCOMMONCONTROLSEX ccEx;
 
@@ -508,6 +544,10 @@ int APIENTRY wWinMain(
 
     if (!InitInstance(hInstance, nCmdShow))
         return FALSE;
+
+    hidGuardian = HidGuardian::init(GetCurrentProcessId());
+    if (StrStrW(lpCmdLine, L"instHG"))
+        hidGuardian->install();
 
     fan = Fan::init();
     jetseat = JetSeat::init();
@@ -1286,10 +1326,19 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 case ID_SETTINGS_FAN:
                     fan->createWindow(hInst);
                     break;
+                case ID_SETTINGS_HIDGUARDIAN:
+                    hidGuardian->createWindow(hInst);
                 default:
                     if (HIWORD(wParam) == CBN_SELCHANGE) {
-                        if ((HWND)lParam == settings.getDevWnd())
-                            settings.setFfbDevice(SendMessage((HWND)lParam, CB_GETCURSEL, 0, 0));                            
+                        if ((HWND)lParam == settings.getDevWnd()) {
+                            GUID oldDevice = settings.getFfbDevice();
+                            DWORD vidpid = 0;  
+                            if (oldDevice != GUID_NULL)
+                                vidpid = getDeviceVidPid(ffdevice); 
+                            settings.setFfbDevice(SendMessage((HWND)lParam, CB_GETCURSEL, 0, 0));
+                            if (vidpid != 0 && oldDevice != settings.getFfbDevice())
+                                hidGuardian->removeDevice(LOWORD(vidpid), HIWORD(vidpid), false);
+                        }
                         else if ((HWND)lParam == settings.getFfbWnd())
                             settings.setFfbType(SendMessage((HWND)lParam, CB_GETCURSEL, 0, 0));
                     }
@@ -1417,6 +1466,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             else
                 settings.writeGenericSettings();
             settings.writeRegSettings();
+            hidGuardian->stop(GetCurrentProcessId());
             exit(0);
         }
         break;
@@ -1513,9 +1563,7 @@ void setOnTrackStatus(bool onTrack) {
 
 }
 
-void configLogiWheel(WORD prodId) {
-
-    text(L"Found Logitech wheel with prodId: 0x%hx", prodId);
+void setLogiWheelRange(WORD prodId) {
 
     if (prodId == G25PID || prodId == DFGTPID || prodId == G27PID) {
 
@@ -1526,7 +1574,7 @@ void configLogiWheel(WORD prodId) {
 
         HANDLE devInfoSet = SetupDiGetClassDevsW(&hidGuid, NULL, NULL, DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
         if (devInfoSet == INVALID_HANDLE_VALUE) {
-            text(L"Error enumerating HID devices, can't set Logitech wheel range");
+            text(L"LogiWheel: Error enumerating HID devices");
             return;
         }
 
@@ -1548,7 +1596,7 @@ void configLogiWheel(WORD prodId) {
 
             if (!SetupDiGetDeviceInterfaceDetailW(devInfoSet, &intfData, NULL, 0, &size, NULL))
                 if (GetLastError() != ERROR_INSUFFICIENT_BUFFER) {
-                    text(L"Error getting intf detail");
+                    text(L"LogiWheel: Error getting intf detail");
                     continue;
                 }
 
@@ -1573,7 +1621,7 @@ void configLogiWheel(WORD prodId) {
                 );
 
                 if (file == INVALID_HANDLE_VALUE) {
-                    text(L"Failed to open Logitech HID device, can't set range");
+                    text(L"LogiWheel: Failed to open HID device");
                     free(intfDetail);
                     SetupDiDestroyDeviceInfoList(devInfoSet);
                     return;
@@ -1581,10 +1629,10 @@ void configLogiWheel(WORD prodId) {
 
                 DWORD written;
 
-                if (!WriteFile(file, "\x00\xf8\x81\x84\x03\x00\x00\x00\x00", 9, &written, NULL))
-                    text(L"Failed to write to Logitech HID device, can't set range");
+                if (!WriteFile(file, LOGI_WHEEL_HID_CMD, LOGI_WHEEL_HID_CMD_LEN, &written, NULL))
+                    text(L"LogiWheel: Failed to write to HID device");
                 else
-                    text(L"Range of Logitech wheel set to 900 deg via raw HID");
+                    text(L"LogiWheel: Range set to 900 deg via raw HID");
 
                 CloseHandle(file);
                 free(intfDetail);
@@ -1731,16 +1779,10 @@ void initDirectInput() {
         return;
     }
 
-    DIPROPDWORD dipdw;
-    dipdw.diph.dwSize = sizeof(DIPROPDWORD);
-    dipdw.diph.dwHeaderSize = sizeof(DIPROPHEADER);
-    dipdw.diph.dwObj = 0;
-    dipdw.diph.dwHow = DIPH_DEVICE;
-
-    hr = ffdevice->GetProperty(DIPROP_VIDPID, &dipdw.diph);
-    if (SUCCEEDED(hr) && (LOWORD(dipdw.dwData) == 0x046d)) {
+    DWORD vidpid = getDeviceVidPid(ffdevice);
+    if (LOWORD(vidpid) == 0x046d) {
         logiWheel = true;
-        configLogiWheel(HIWORD(dipdw.dwData));
+        setLogiWheelRange(HIWORD(vidpid));
     }
     else
         logiWheel = false;
@@ -1765,6 +1807,9 @@ void initDirectInput() {
     hr = effect->SetParameters(&dieff, DIEP_TYPESPECIFICPARAMS | DIEP_START);
     if (hr == DIERR_NOTINITIALIZED || hr == DIERR_INPUTLOST || hr == DIERR_INCOMPLETEEFFECT || hr == DIERR_INVALIDPARAM)
         text(L"Error setting parameters of DIEFFECT: %d", hr);
+
+    if (vidpid != 0)
+        hidGuardian->setDevice(LOWORD(vidpid), HIWORD(vidpid));
 
 }
 
@@ -1830,11 +1875,11 @@ inline void setFFB(int mag) {
     if (!effect)
         return;
 
-    if (mag <= -DI_MAX) {
+    if (mag <= -DI_MAX + 1) {
         mag = -DI_MAX;
         clippedSamples++;
     }
-    else if (mag >= DI_MAX) {
+    else if (mag >= DI_MAX - 1) {
         mag = DI_MAX;
         clippedSamples++;
     }
@@ -1943,7 +1988,6 @@ NEXT:
     return true;
 
 }
-
 
 void initAll() {
 

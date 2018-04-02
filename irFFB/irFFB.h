@@ -45,6 +45,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define HID_CLASS_GUID { 0x745a17a0, 0x74d3, 0x11d0, 0xb6, 0xfe, 0x00, 0xa0, 0xc9, 0x0f, 0x57, 0xda };
 #define WM_TRAY_ICON WM_USER+1
 #define ID_TRAY_EXIT 40000
+#define SVCNAME L"irFFBsvc"
 
 #define G25PID  0xc299
 #define DFGTPID 0xc29a
@@ -53,6 +54,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define G25PATH  L"vid_046d&pid_c299"
 #define DFGTPATH L"vid_046d&pid_c29a"
 #define G27PATH  L"vid_046d&pid_c29b"
+
+#define LOGI_WHEEL_HID_CMD "\x00\xf8\x81\x84\x03\x00\x00\x00\x00"
+#define LOGI_WHEEL_HID_CMD_LEN 9
 
 enum ffbType {
     FFBTYPE_360HZ,

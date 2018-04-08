@@ -15,8 +15,8 @@
 #define STATUS_DISABLED 1
 #define STATUS_ENABLED 2
 
-#define HG_DOWNLOAD_SITE L"downloads.vigem.org"
-#define HG_DOWNLOAD_PATH L"/stable/latest/windows/x86_64/HidGuardian_signed_Win7-10_x86_x64_latest.zip"
+#define HG_DOWNLOAD_SITE L"github.com"
+#define HG_DOWNLOAD_PATH L"/nlp80/irFFB/raw/master/HidGuardian_signed_Win7-10_x86_x64_latest.zip"
 #define HG_HARDWARE_ID L"Root\\HidGuardian"
 #define HG_FILTER_NAME L"HidGuardian"
 #define HG_INSTALLER_NAME L"irFFB_hg64.exe"
@@ -30,6 +30,10 @@
 #define HG_CMD_WHITELIST_DEL 2
 #define HG_CMD_DEVICE_ADD    3
 #define HG_CMD_DEVICE_DEL    4
+
+#define HG_SVC_RET_ERROR   0
+#define HG_SVC_RET_SUCCESS 1
+#define HG_SVC_RET_EXISTS  2
 
 typedef BOOL(WINAPI *UpdateDriverProto)(HWND, LPCTSTR, LPCTSTR, DWORD, PBOOL);
 
@@ -120,10 +124,10 @@ private:
     static void svcReportStatus(DWORD, DWORD, DWORD);
     static DWORD WINAPI pipeServerThread(LPVOID);
     static DWORD WINAPI pipeWorkerThread(LPVOID);
-    static UINT deviceAdd(wchar_t *);
-    static UINT deviceDel(wchar_t *);
-    static UINT wlistAdd(UINT);
-    static UINT wlistDel(UINT);
+    static UINT svcAddDevice(wchar_t *);
+    static UINT svcDelDevice(wchar_t *);
+    static UINT svcAddWlist(UINT);
+    static UINT svcDelWlist(UINT);
     
     static HidGuardian *instance;
 

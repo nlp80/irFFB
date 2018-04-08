@@ -144,6 +144,7 @@ LRESULT CALLBACK HidGuardian::wndProc(HWND hWnd, UINT message, WPARAM wParam, LP
 void HidGuardian::install() {
 
     BOOL wow64;
+    wchar_t *infPath = nullptr;
 
     IsWow64Process(GetCurrentProcess(), &wow64);
 
@@ -168,7 +169,7 @@ void HidGuardian::install() {
         goto cleanup;
 
     int infPathLen = wcslen(hidFld) + 64;
-    wchar_t *infPath = new wchar_t[infPathLen];
+    infPath = new wchar_t[infPathLen];
     StringCchCopyW(infPath, infPathLen, hidFld);
     if (wow64)
         StringCchCatW(infPath, infPathLen, L"\\x64\\HidGuardian.inf");
@@ -210,7 +211,8 @@ installSvc:
     setStatus(status);
 
 del:
-    delete[] infPath;
+    if (infPath != nullptr)
+        delete[] infPath;
 cleanup:
     cleanupInstall();
 
@@ -232,9 +234,10 @@ void HidGuardian::setDevice(WORD vid, WORD pid) {
 
     msg.cmd = HG_CMD_DEVICE_ADD;
     StringCchPrintf(msg.id.hwid, 32, HG_HWID_FMT, vid, pid);
-    if (sendSvcMsg(&msg))
+    UINT resp = sendSvcMsg(&msg);
+    if (resp == HG_SVC_RET_SUCCESS)
         text(L"HG: *** Dev change - unplug/replug or reboot ***");
-    else
+    else if (resp == HG_SVC_RET_ERROR)
         text(L"HG: Failed to set device");
     
 }
@@ -1397,10 +1400,10 @@ void HidGuardian::svcReportError(wchar_t *msg) {
 
 }
 
-UINT HidGuardian::deviceAdd(wchar_t *dev) {
+UINT HidGuardian::svcAddDevice(wchar_t *dev) {
 
     HKEY key;
-    UINT ret = 0;
+    UINT ret = HG_SVC_RET_ERROR;
 
     if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, HG_PARAMS_KEY, 0, KEY_ALL_ACCESS, &key)) {
         svcReportError(L"Failed to open HG parameters key");
@@ -1414,8 +1417,10 @@ UINT HidGuardian::deviceAdd(wchar_t *dev) {
         if (RegSetValueExW(key, HG_DEVICES_VALUE_NAME, 0, REG_MULTI_SZ, (BYTE *)newDevices, multiSzLen(newDevices)))
             svcReportError(L"Failed to add device");
         else
-            ret = 1;
+            ret = HG_SVC_RET_SUCCESS;
     }
+    else
+        ret = HG_SVC_RET_EXISTS;
 
     if (devices != nullptr)
         delete[] devices;
@@ -1427,10 +1432,10 @@ UINT HidGuardian::deviceAdd(wchar_t *dev) {
 
 }
 
-UINT HidGuardian::deviceDel(wchar_t *dev) {
+UINT HidGuardian::svcDelDevice(wchar_t *dev) {
 
     HKEY key;
-    UINT ret = 0;
+    UINT ret = HG_SVC_RET_ERROR;
 
     if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, HG_PARAMS_KEY, 0, KEY_ALL_ACCESS, &key)) {
         svcReportError(L"Failed to open HG parameters key");
@@ -1452,12 +1457,12 @@ UINT HidGuardian::deviceDel(wchar_t *dev) {
         goto done;
     }
 
-    ret = 1;
+    ret = HG_SVC_RET_SUCCESS;
 
 done:
     if (devices != nullptr)
         delete[] devices;
-    if (newDevices != nullptr && newDevices != devices)
+    if (newDevices != nullptr)
         delete[] newDevices;
 closeKey:
     RegCloseKey(key);
@@ -1465,17 +1470,17 @@ closeKey:
 
 }
 
-UINT HidGuardian::wlistAdd(UINT pid) {
+UINT HidGuardian::svcAddWlist(UINT pid) {
 
     HKEY key, wlKey, pidKey;
     wchar_t name[MAX_PATH];
     DWORD nameLen = MAX_PATH;
     int idx = 0;
-    UINT ret = ERROR_SUCCESS;
+    UINT ret = HG_SVC_RET_ERROR;
 
     if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, HG_PARAMS_KEY, 0, KEY_ALL_ACCESS, &key)) {
         svcReportError(L"Failed to oepn HG parameters key");
-        return 0;
+        return ret;
     }
 
     if (
@@ -1486,7 +1491,7 @@ UINT HidGuardian::wlistAdd(UINT pid) {
     ) {
         svcReportError(L"Failed to create/open whitelist key");
         RegCloseKey(key);
-        return 0;
+        return ret;
     }
 
     while (ret == ERROR_SUCCESS) {
@@ -1495,7 +1500,7 @@ UINT HidGuardian::wlistAdd(UINT pid) {
         if (ret != ERROR_SUCCESS)
             break;
         if (_wtoi(name) == pid) {
-            ret = 1;
+            ret = HG_SVC_RET_EXISTS;
             goto done;
         }
     }
@@ -1516,7 +1521,7 @@ UINT HidGuardian::wlistAdd(UINT pid) {
     }
 
     RegCloseKey(pidKey);
-    ret = 1;
+    ret = HG_SVC_RET_SUCCESS;
 
 done:
     RegCloseKey(wlKey);
@@ -1525,10 +1530,10 @@ done:
 
 }
 
-UINT HidGuardian::wlistDel(UINT pid) {
+UINT HidGuardian::svcDelWlist(UINT pid) {
 
     HKEY key;
-    UINT ret = 0;
+    UINT ret = HG_SVC_RET_ERROR;
     wchar_t str[MAX_PATH];
 
     StringCchCopy(str, MAX_PATH, HG_PARAMS_KEY);
@@ -1546,7 +1551,7 @@ UINT HidGuardian::wlistDel(UINT pid) {
     }
 
     if (!RegDeleteKeyExW(key, str, KEY_ALL_ACCESS, 0))
-        ret = 1;
+        ret = HG_SVC_RET_SUCCESS;
 
 done:
     RegCloseKey(key);
@@ -1616,7 +1621,7 @@ DWORD WINAPI HidGuardian::pipeWorkerThread(LPVOID arg) {
     HANDLE pipe = (HANDLE)arg;
     pipeMsg msg;
     DWORD len;
-    UINT resp = 0;
+    UINT resp = HG_SVC_RET_ERROR;
 
     if (pipe == NULL) {
         svcReportError(L"Pipe worker thread got NULL pipe");
@@ -1634,16 +1639,16 @@ DWORD WINAPI HidGuardian::pipeWorkerThread(LPVOID arg) {
         switch (msg.cmd) {
 
             case HG_CMD_WHITELIST_ADD:
-                resp = wlistAdd(msg.id.pid);
+                resp = svcAddWlist(msg.id.pid);
                 break;
             case HG_CMD_WHITELIST_DEL:
-                resp = wlistDel(msg.id.pid);
+                resp = svcDelWlist(msg.id.pid);
                 break;
             case HG_CMD_DEVICE_ADD:
-                resp = deviceAdd(msg.id.hwid);
+                resp = svcAddDevice(msg.id.hwid);
                 break;
             case HG_CMD_DEVICE_DEL:
-                resp = deviceDel(msg.id.hwid);
+                resp = svcDelDevice(msg.id.hwid);
                 break;
             default:
                 svcReportError(L"Pipe worker, received unknown cmd");

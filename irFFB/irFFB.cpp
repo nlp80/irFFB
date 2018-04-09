@@ -66,7 +66,7 @@ float firc12[] = {
 
 char car[MAX_CAR_NAME];
 
-int force = 0;
+int force = 0, maxSample = 0;
 volatile float suspForce = 0.0f; 
 volatile float yawForce[DIRECT_INTERP_SAMPLES];
 volatile float wheelVel = 0.0f;
@@ -400,10 +400,11 @@ float getCarRedline() {
 void clippingReport() {
 
     UINT clippedPerCent = samples > 0 ? clippedSamples * 100 / samples : 0;
+    text(L"Max sample value: %d", maxSample);
     text(L"%u%% of samples were clipped", clippedPerCent);
-    if (clippedPerCent > 10)
-        text(L"Consider increasing Max force to reduce clipping");
-    samples = clippedSamples = 0;
+    if (clippedPerCent > 5)
+        text(L"Consider increasing max force to reduce clipping");
+    samples = clippedSamples = maxSample = 0;
 
 }
 
@@ -434,6 +435,9 @@ DWORD getDeviceVidPid(LPDIRECTINPUTDEVICE8 dev) {
     dipdw.diph.dwHeaderSize = sizeof(DIPROPHEADER);
     dipdw.diph.dwObj = 0;
     dipdw.diph.dwHow = DIPH_DEVICE;
+
+    if (dev == nullptr)
+        return 0;
 
     if (!SUCCEEDED(dev->GetProperty(DIPROP_VIDPID, &dipdw.diph)))
         return 0;
@@ -694,7 +698,10 @@ int APIENTRY wWinMain(
             
                 float bumpsFactor = settings.getBumpsFactor();
                 float loadFactor = settings.getLoadFactor();
-                bool extraLongLoad = settings.getExtraLongLoad();
+                int longLoadFactor = settings.getLongLoadFactor();
+                float sopFactor = settings.getSopFactor();
+                float sopOffset = settings.getSopOffset();
+
                 bool use360  = settings.getUse360ForDirect();
                 int ffbType = settings.getFfbType();
 
@@ -709,16 +716,19 @@ int APIENTRY wWinMain(
 
                     if (ar > 1.0f) {
                         sa = csignf(0.785f, r);
-                        yaw = csignf(halfMaxForce, r);                        
+                        yaw = minf(maxf(sa * sopFactor, -halfMaxForce), halfMaxForce);
                     }
                     else {
                         sa = 0.78539816339745f * r + 0.273f * r * (1.0f - ar);
                         asa = abs(sa);
-                        sa *= 2.0f - asa;
-                        yaw = minf(maxf(sa * settings.getYawFactor(), -halfMaxForce), halfMaxForce);
+                        if (asa > sopOffset) {
+                            sa -= csignf(sopOffset, sa);
+                            sa *= 2.0f - asa;
+                            yaw = minf(maxf(sa * sopFactor, -halfMaxForce), halfMaxForce);
+                        }
                     }
 
-                    if (jetseat && jetseat->isEnabled() && asa > 0.05f)
+                    if (jetseat && jetseat->isEnabled() && asa > sopOffset)
                         jetseat->yawEffect(sa);
 
                 }
@@ -799,43 +809,25 @@ int APIENTRY wWinMain(
                                 // xmm4 = LFdefl[3,4,5]
                                 // xmm5 = RFdefl[3,4,5]
                                 // xmm3 = Fnom
-                                // eax = 2.0f
-                                mov eax, 0x40000000
-                                // xmm0 = Fnom 
-                                movaps xmm0, xmm3
-                                // xmm2 = 2.0f
-                                movd xmm2, eax
                                 // xmm1 = LFdefl[0,1,2,3]
                                 movaps xmm1, xmm6
-                                // xmm0 = Fnom / 2
-                                divss xmm0, xmm2
                                 unpcklps xmm3, xmm3
-                                unpcklps xmm0, xmm0
                                 // xmm2 = RFdefl[0,1,2,3]
                                 movaps xmm2, xmm7
-                                unpcklps xmm0, xmm0
-                                // xmm6 = LFdefl[0,1,2,3] - Fnom/2
-                                subps xmm6, xmm0
                                 unpcklps xmm3, xmm3
-                                // xmm7 = RFdefl[0,1,2,3] - Fnom/2
-                                subps xmm7, xmm0
                                 // xmm4 = LFdefl[4,5]
                                 psrldq xmm4, 4
-                                // xmm6 = (LFdefl - Fnom/2) - (RFdefl - Fnom/2)[0,1,2,3]
+                                // xmm6 = LFdefl - RFdefl[0,1,2,3]
                                 subps xmm6, xmm7
                                 // xmm7 = LFdefl[4,5]
                                 movaps xmm7, xmm4
                                 // xmm5 = RFdefl[4,5]
                                 psrldq xmm5, 4
-                                // xmm4 = LFdefl[4,5] - Fnom/2
-                                subps xmm4, xmm0
                                 // xmm7 = LFdefl + RFdefl [4,5]
                                 addps xmm7, xmm5
-                                // xmm5 = RFdefl[4,5] - Fnom/2
-                                subps xmm5, xmm0
                                 // xmm1 = LFdefl + RFdefl [0,1,2,3]
                                 addps xmm1, xmm2
-                                // xmm4 = (LFdefl - Fnom/2) - (RFdefl - Fnom/2)[4,5]
+                                // xmm4 = LFdefl - RFdefl[4,5]
                                 subps xmm4, xmm5
                                 movss xmm5, loadFactor
                                 // xmm1 = LFdefl + RFdefl / Fnom [0,1,2,3]
@@ -843,23 +835,36 @@ int APIENTRY wWinMain(
                                 unpcklps xmm5, xmm5
                                 // xmm7 = LFdefl + RFdefl / Fnom [4,5]
                                 divps xmm7, xmm3
-                                // xmm7 = (LFdefl + RFdefl / Fnom) ^ 4 [4,5] 
-                                // xmm1 = (LFdefl + RFdefl / Fnom) ^ 4 [0,1,2,3] 
+                                // xmm1 = (LFdefl + RFdefl / Fnom) ^ 2 [0,1,2,3] 
                                 mulps xmm1, xmm1
-                                mov al, byte ptr extraLongLoad
+                                mov eax, dword ptr longLoadFactor
+                                movaps xmm0, xmm1
+                                // xmm7 = (LFdefl + RFdefl / Fnom) ^ 2 [4,5]
                                 mulps xmm7, xmm7
                                 unpcklps xmm5, xmm5
+                                movaps xmm3, xmm7
+                                // xmm1 = (LFdefl + RFdefl / Fnom) ^ 4 [0,1,2,3] 
                                 mulps xmm1, xmm1
-                                test al, al
+                                cmp eax, 2
+                                // xmm7 = (LFdefl + RFdefl / Fnom) ^ 4 [4,5]
                                 mulps xmm7, xmm7
-                                jz upd
+                                jl upd
+                                jg oct
+                                // xmm1 = (LFdefl + RFdefl / Fnom) ^ 6 [0,1,2,3] 
+                                mulps xmm1, xmm0
+                                // xmm7 = (LFdefl + RFdefl / Fnom) ^ 6 [4,5]    
+                                mulps xmm7, xmm3
+                                jmp upd
+                             oct:
+                                // xmm1 = (LFdefl + RFdefl / Fnom) ^ 8 [0,1,2,3] 
                                 mulps xmm1, xmm1
+                                // xmm7 = (LFdefl + RFdefl / Fnom) ^ 8 [4,5]    
                                 mulps xmm7, xmm7
                             upd:                       
-                                // xmm1 = ((LFdefl - Fnom/2) - (RFdefl - Fnom/2)) * ((LFdefl + RFdefl) / Fnom) ^ 4) [0,1,2,3]
+                                // xmm1 = ((LFdefl - Fnom/2) - (RFdefl - Fnom/2)) * ((LFdefl + RFdefl) / Fnom) ^ n) [0,1,2,3]
                                 mulps xmm1, xmm6
                                 movaps xmm2, xmmword ptr suspForceST[0]
-                                // xmm7 = ((LFdefl - Fnom/2) - (RFdefl - Fnom/2)) * ((LFdefl + RFdefl) / Fnom) ^ 4) [4,5]
+                                // xmm7 = ((LFdefl - Fnom/2) - (RFdefl - Fnom/2)) * ((LFdefl + RFdefl) / Fnom) ^ n) [4,5]
                                 mulps xmm7, xmm4
                                 // xmm1 *= loadFactor
                                 mulps xmm1, xmm5
@@ -886,13 +891,18 @@ int APIENTRY wWinMain(
                                 ) * bumpsFactor * 0.25f;
 
                             if (FshockNom != 0.0f && loadFactor != 0.0f) {
-                                float FnomAvg = FshockNom / 2.0f;
+
+                                float Ftot = (LFshockDeflST[STmaxIdx] + RFshockDeflST[STmaxIdx]) / FshockNom;
+                                float Ftot2 = Ftot * Ftot;
+                                float Ftot4 = Ftot2 * Ftot2;
+
                                 suspForce +=
-                                    ((LFshockDeflST[STmaxIdx] - FnomAvg) - (RFshockDeflST[STmaxIdx] - FnomAvg)) *
-                                        pow(
-                                            (LFshockDeflST[STmaxIdx] + RFshockDeflST[STmaxIdx]) / FshockNom,
-                                            extraLongLoad ? LONGLOAD_MAXPOWER : LONGLOAD_STDPOWER
+                                    (LFshockDeflST[STmaxIdx] - RFshockDeflST[STmaxIdx]) *
+                                        (
+                                            longLoadFactor == 1 ? Ftot4 :
+                                                (longLoadFactor == 2 ? Ftot4 * Ftot2 : Ftot4 * Ftot4)
                                         ) * loadFactor;
+
                             }
                         }
 
@@ -1250,22 +1260,22 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow) {
     settings.setMaxWnd(slider(mainWnd, L"Max force:", 44, 226, L"5 Nm", L"65 Nm"));
     settings.setBumpsWnd(slider(mainWnd, L"Suspension bumps:", 464, 40, L"0", L"100"));
     settings.setLoadWnd(slider(mainWnd, L"Suspension load:", 464, 100, L"0", L"100"));
-    settings.setYawWnd(slider(mainWnd, L"SoP effect:", 464, 164, L"0", L"100"));
-    settings.setExtraLongWnd(
-        checkbox(mainWnd, L" Increased longitudinal weight transfer effect?", 460, 230)
-    );
+    settings.setLongLoadWnd(slider(mainWnd, L"Longitudinal load factor:", 464, 160, L"1", L"3"));
+    SendMessage(settings.getLongLoadWnd()->trackbar, TBM_SETRANGE, true, MAKELPARAM(1, 3));
+    settings.setSopWnd(slider(mainWnd, L"SoP effect:", 464, 220, L"0", L"100"));
+    settings.setSopOffsetWnd(slider(mainWnd, L"SoP deadzone:", 464, 280, L"0", L"100"));
     settings.setUse360Wnd(
         checkbox(
             mainWnd, 
             L" Use 360 Hz telemetry for suspension effects\r\n in direct modes?",
-            460, 280
+            460, 380
         )
     );
     settings.setCarSpecificWnd(
-        checkbox(mainWnd, L" Use car specific settings?", 460, 326)
+        checkbox(mainWnd, L" Use car specific settings?", 460, 440)
     );
     settings.setReduceWhenParkedWnd(
-        checkbox(mainWnd, L" Reduce force when parked?", 460, 420)
+        checkbox(mainWnd, L" Reduce force when parked?", 460, 480)
     );
     settings.setRunOnStartupWnd(
         checkbox(mainWnd, L" Run on startup?", 460, 520)
@@ -1346,8 +1356,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                         bool oldValue = SendMessage((HWND)lParam, BM_GETCHECK, 0, 0) == BST_CHECKED;
                         if ((HWND)lParam == settings.getUse360Wnd())
                             settings.setUse360ForDirect(!oldValue);
-                        else if ((HWND)lParam == settings.getExtraLongWnd())
-                            settings.setExtraLongLoad(!oldValue);
                         else if ((HWND)lParam == settings.getCarSpecificWnd()) {
                             if (!oldValue)
                                 getCarName();
@@ -1374,8 +1382,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 settings.setBumpsFactor(SendMessage((HWND)lParam, TBM_GETPOS, 0, 0));
             else if ((HWND)lParam == settings.getLoadWnd()->trackbar)
                 settings.setLoadFactor(SendMessage((HWND)lParam, TBM_GETPOS, 0, 0));
-            else if ((HWND)lParam == settings.getYawWnd()->trackbar)
-                settings.setYawFactor(SendMessage((HWND)lParam, TBM_GETPOS, 0, 0));
+            else if ((HWND)lParam == settings.getLongLoadWnd()->trackbar)
+                settings.setLongLoadFactor(SendMessage((HWND)lParam, TBM_GETPOS, 0, 0));
+            else if ((HWND)lParam == settings.getSopWnd()->trackbar)
+                settings.setSopFactor(SendMessage((HWND)lParam, TBM_GETPOS, 0, 0));
+            else if ((HWND)lParam == settings.getSopOffsetWnd()->trackbar)
+                settings.setSopOffset(SendMessage((HWND)lParam, TBM_GETPOS, 0, 0));
         }
         break;
 
@@ -1875,12 +1887,17 @@ inline void setFFB(int mag) {
     if (!effect)
         return;
 
-    if (mag <= -DI_MAX + 1) {
-        mag = -DI_MAX;
+    int amag = abs(mag);
+
+    if (amag > maxSample)
+        maxSample = amag;
+
+    if (mag <= -IR_MAX) {
+        mag = -IR_MAX;
         clippedSamples++;
     }
-    else if (mag >= DI_MAX - 1) {
-        mag = DI_MAX;
+    else if (mag >= IR_MAX) {
+        mag = IR_MAX;
         clippedSamples++;
     }
 
@@ -1910,11 +1927,11 @@ bool initVJD() {
     VjdStat vjdStatus = VJD_STAT_UNKN;
 
     if (!vJoyEnabled()) {
-        text(L"vJoy Not Enabled!");
+        text(L"vJoy not enabled!");
         return false;
     }
     else if (!DriverMatch(&verDll, &verDrv)) {
-        text(L"vJoy driver version %04x != DLL version %04x!", verDrv, verDll);
+        text(L"vJoy driver version %04x != required version %04x!", verDrv, verDll);
         return false;
     }
     else

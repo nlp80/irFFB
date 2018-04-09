@@ -18,10 +18,12 @@ class Settings {
         sWins_t *getBumpsWnd();
         void setLoadWnd(sWins_t *);
         sWins_t *getLoadWnd();
-        void setYawWnd(sWins_t *);
-        sWins_t *getYawWnd();
-        void setExtraLongWnd(HWND);
-        HWND getExtraLongWnd();
+        void setLongLoadWnd(sWins_t *);
+        sWins_t *getLongLoadWnd();
+        void setSopWnd(sWins_t *);
+        sWins_t *getSopWnd();
+        void setSopOffsetWnd(sWins_t *);
+        sWins_t *getSopOffsetWnd();
         void setUse360Wnd(HWND);
         HWND getUse360Wnd();
         void setCarSpecificWnd(HWND);
@@ -48,10 +50,12 @@ class Settings {
         float getBumpsFactor();
         void setLoadFactor(int);
         float getLoadFactor();
-        void setYawFactor(int);
-        float getYawFactor();
-        void setExtraLongLoad(bool);
-        bool getExtraLongLoad();
+        void setLongLoadFactor(int);
+        int getLongLoadFactor();
+        void setSopFactor(int);
+        float getSopFactor();
+        void setSopOffset(int);
+        float getSopOffset();
         void setUse360ForDirect(bool);
         bool getUse360ForDirect();
         void setUseCarSpecific(bool, char *);
@@ -65,6 +69,7 @@ class Settings {
         int getBumpsSetting();
         int getLoadSetting();
         int getMinForceSetting();
+        int getSopOffsetSetting();
         void writeCarSpecificSetting();
         void readRegSettings(char *);
         void readGenericSettings();
@@ -75,12 +80,12 @@ class Settings {
 
     private:
         HWND devWnd, ffbWnd;
-        sWins_t *minWnd, *maxWnd, *bumpsWnd, *loadWnd, *yawWnd;
-        HWND extraLongWnd, use360Wnd, carSpecificWnd, reduceWhenParkedWnd;
+        sWins_t *minWnd, *maxWnd, *bumpsWnd, *loadWnd, *longLoadWnd, *sopWnd, *sopOffsetWnd;
+        HWND use360Wnd, carSpecificWnd, reduceWhenParkedWnd;
         HWND runOnStartupWnd, startMinimisedWnd;
-        int ffbType, ffdeviceIdx, minForce, maxForce;
-        float scaleFactor, bumpsFactor, loadFactor, yawFactor;
-        bool extraLongLoad, use360ForDirect, useCarSpecific;
+        int ffbType, ffdeviceIdx, minForce, maxForce, longLoadFactor;
+        float scaleFactor, bumpsFactor, loadFactor, sopFactor, sopOffset;
+        bool use360ForDirect, useCarSpecific;
         bool reduceWhenParked, runOnStartup, startMinimised;
         GUID devGuid = GUID_NULL, ffdevices[MAX_FFB_DEVICES];
         wchar_t strbuf[64];

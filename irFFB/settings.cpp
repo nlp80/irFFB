@@ -37,11 +37,15 @@ sWins_t *Settings::getBumpsWnd() { return bumpsWnd; }
 void Settings::setLoadWnd(sWins_t *wnd) { loadWnd = wnd; }
 sWins_t *Settings::getLoadWnd() { return loadWnd; }
 
-void Settings::setYawWnd(sWins_t *wnd) { yawWnd = wnd; }
-sWins_t *Settings::getYawWnd() { return yawWnd; }
+void Settings::setLongLoadWnd(sWins_t *wnd) { longLoadWnd = wnd; }
+sWins_t *Settings::getLongLoadWnd() { return longLoadWnd; }
+
+void Settings::setSopWnd(sWins_t *wnd) { sopWnd = wnd; }
+sWins_t *Settings::getSopWnd() { return sopWnd; }
         
-void Settings::setExtraLongWnd(HWND wnd) { extraLongWnd = wnd; }
-HWND Settings::getExtraLongWnd() { return extraLongWnd; }
+void Settings::setSopOffsetWnd(sWins_t *wnd) { sopOffsetWnd = wnd; }
+sWins_t *Settings::getSopOffsetWnd() { return sopOffsetWnd; }
+
 void Settings::setUse360Wnd(HWND wnd) { use360Wnd = wnd; }
 HWND Settings::getUse360Wnd() { return use360Wnd; }
 void Settings::setReduceWhenParkedWnd(HWND wnd) { reduceWhenParkedWnd = wnd; }
@@ -144,24 +148,42 @@ void Settings::setLoadFactor(int factor) {
     SendMessage(loadWnd->trackbar, TBM_SETPOS, TRUE, factor);
     swprintf_s(strbuf, L"Suspension load  [ %d ]", factor);
     SendMessage(loadWnd->value, WM_SETTEXT, NULL, LPARAM(strbuf));
+    EnableWindow(longLoadWnd->trackbar, factor != 0);
 }
 float Settings::getLoadFactor() { return loadFactor; }
 
-void Settings::setYawFactor(int factor) {
+void Settings::setLongLoadFactor(int factor) {
+    if (factor < 0 || factor > 3)
+        return;
+    if (factor < 1)
+        factor = 1;
+    longLoadFactor = factor;
+    SendMessage(longLoadWnd->trackbar, TBM_SETPOS, TRUE, factor);
+    swprintf_s(strbuf, L"Longitudinal factor  [ %d ]", factor);
+    SendMessage(longLoadWnd->value, WM_SETTEXT, NULL, LPARAM(strbuf));
+}
+int Settings::getLongLoadFactor() { return longLoadFactor; }
+
+void Settings::setSopFactor(int factor) {
     if (factor < 0 || factor > 100)
         return;
-    yawFactor = (float)factor;
-    SendMessage(yawWnd->trackbar, TBM_SETPOS, TRUE, factor);
+    sopFactor = (float)factor;
+    SendMessage(sopWnd->trackbar, TBM_SETPOS, TRUE, factor);
     swprintf_s(strbuf, L"SoP  [ %d ]", factor);
-    SendMessage(yawWnd->value, WM_SETTEXT, NULL, LPARAM(strbuf));
+    SendMessage(sopWnd->value, WM_SETTEXT, NULL, LPARAM(strbuf));
+    EnableWindow(sopOffsetWnd->trackbar, factor != 0);
 }
-float Settings::getYawFactor() { return yawFactor; }
+float Settings::getSopFactor() { return sopFactor; }
 
-void Settings::setExtraLongLoad(bool set) {
-    extraLongLoad = set;
-    SendMessage(extraLongWnd, BM_SETCHECK, set ? BST_CHECKED : BST_UNCHECKED, NULL);
+void Settings::setSopOffset(int offset) {
+    if (offset < 0 || offset > 100)
+        return;
+    sopOffset = (float)offset / 572.958f;
+    SendMessage(sopOffsetWnd->trackbar, TBM_SETPOS, TRUE, offset);
+    swprintf_s(strbuf, L"SoP offset  [ %d ]", offset);
+    SendMessage(sopOffsetWnd->value, WM_SETTEXT, NULL, LPARAM(strbuf));
 }
-bool Settings::getExtraLongLoad() { return extraLongLoad; }
+float Settings::getSopOffset() { return sopOffset; }
 
 void Settings::setUse360ForDirect(bool set) {
     use360ForDirect = set;
@@ -238,6 +260,10 @@ int Settings::getLoadSetting() {
 
 int Settings::getMinForceSetting() {
     return minForce / MINFORCE_MULTIPLIER;
+}
+
+int Settings::getSopOffsetSetting() {
+    return (int)(sopOffset * 572.958f);
 }
 
 void Settings::writeCarSpecificSetting() {
@@ -326,19 +352,22 @@ void Settings::readGenericSettings() {
             setLoadFactor(0);
         else
             setLoadFactor(val);
-        if (RegGetValue(regKey, nullptr, L"yawFactor", RRF_RT_REG_DWORD, nullptr, &val, &sz))
-            setYawFactor(0);
+        if (RegGetValue(regKey, nullptr, L"longLoadFactor", RRF_RT_REG_DWORD, nullptr, &val, &sz))
+            setLongLoadFactor(1);
         else
-            setYawFactor(val);
+            setLongLoadFactor(val);
+        if (RegGetValue(regKey, nullptr, L"yawFactor", RRF_RT_REG_DWORD, nullptr, &val, &sz))
+            setSopFactor(0);
+        else
+            setSopFactor(val);
+        if (RegGetValue(regKey, nullptr, L"yawOffset", RRF_RT_REG_DWORD, nullptr, &val, &sz))
+            setSopOffset(0);
+        else
+            setSopOffset(val);
         if (RegGetValue(regKey, nullptr, L"use360ForDirect", RRF_RT_REG_DWORD, nullptr, &val, &sz))
             setUse360ForDirect(true);
         else
-            setUse360ForDirect(val > 0);
-        if (RegGetValue(regKey, nullptr, L"extraLongLoad", RRF_RT_REG_DWORD, nullptr, &val, &sz))
-            setExtraLongLoad(false);
-        else
-            setExtraLongLoad(val > 0);
-       
+            setUse360ForDirect(val > 0);       
 
     }
     else {
@@ -347,9 +376,9 @@ void Settings::readGenericSettings() {
         setMaxForce(45);
         setBumpsFactor(0);
         setLoadFactor(0);
-        setYawFactor(0);
+        setLongLoadFactor(1);
+        setSopFactor(0);
         setUse360ForDirect(true);
-        setExtraLongLoad(false);
     }
 
 }
@@ -390,8 +419,8 @@ void Settings::writeGenericSettings() {
     DWORD load = getLoadSetting();
     DWORD min = getMinForceSetting();
     DWORD use360 = getUse360ForDirect();
-    DWORD extraLong = getExtraLongLoad();    
-    DWORD yaw = (DWORD)yawFactor;
+    DWORD sopOff = getSopOffsetSetting();
+    DWORD sop = (DWORD)sopFactor;
 
     RegCreateKeyEx(
         HKEY_CURRENT_USER, SETTINGS_KEY, 0, nullptr,
@@ -403,11 +432,12 @@ void Settings::writeGenericSettings() {
         RegSetValueEx(regKey, L"ffb", 0, REG_DWORD, (BYTE *)&ffbType, sz);
         RegSetValueEx(regKey, L"bumpsFactor", 0, REG_DWORD, (BYTE *)&bumps, sz);
         RegSetValueEx(regKey, L"loadFactor", 0, REG_DWORD, (BYTE *)&load, sz);
-        RegSetValueEx(regKey, L"yawFactor", 0, REG_DWORD, (BYTE *)&yaw, sz);
+        RegSetValueEx(regKey, L"longLoadFactor", 0, REG_DWORD, (BYTE *)&longLoadFactor, sz);
+        RegSetValueEx(regKey, L"yawFactor", 0, REG_DWORD, (BYTE *)&sop, sz);
+        RegSetValueEx(regKey, L"yawOffset", 0, REG_DWORD, (BYTE *)&sopOff, sz);
         RegSetValueEx(regKey, L"maxForce", 0, REG_DWORD, (BYTE *)&maxForce, sz);
         RegSetValueEx(regKey, L"minForce", 0, REG_DWORD, (BYTE *)&min, sz);
         RegSetValueEx(regKey, L"use360ForDirect", 0, REG_DWORD, (BYTE *)&use360, sz);
-        RegSetValueEx(regKey, L"extraLongLoad", 0, REG_DWORD, (BYTE *)&extraLong, sz);
        
     }
 
@@ -426,7 +456,7 @@ void Settings::readSettingsForCar(char *car) {
     std::string line;
 
     char carName[MAX_CAR_NAME];
-    int type = 2, min = 0, max = 45, bumps = 0, load = 0, yaw = 0, extraLong = 0, use360 = 1;
+    int type = 2, min = 0, max = 45, bumps = 0, load = 0, longLoad = 1, yaw = 0, yawOffset = 0, use360 = 1;
 
     memset(carName, 0, sizeof(carName));
 
@@ -435,7 +465,7 @@ void Settings::readSettingsForCar(char *car) {
             sscanf_s(
                 line.c_str(), INI_SCAN_FORMAT,
                 carName, sizeof(carName),
-                &type, &min, &max, &bumps, &load, &extraLong, &use360, &yaw
+                &type, &min, &max, &bumps, &load, &longLoad, &use360, &yaw, &yawOffset
             ) < 8
         )
             continue;
@@ -453,8 +483,8 @@ void Settings::readSettingsForCar(char *car) {
     setMaxForce(max);
     setBumpsFactor(bumps);
     setLoadFactor(load);
-    setYawFactor(yaw);
-    setExtraLongLoad(extraLong > 0);
+    setLongLoadFactor(longLoad);
+    setSopFactor(yaw);
     setUse360ForDirect(use360 > 0);
 
 DONE:
@@ -481,7 +511,7 @@ void Settings::writeSettingsForCar(char *car) {
     std::string line;
 
     char carName[MAX_CAR_NAME], buf[256];
-    int type = 2, min = 0, max = 45, bumps = 0, load = 0, yaw = 0, extraLong = 0, use360 = 1;
+    int type = 2, min = 0, max = 45, bumps = 0, load = 0, longLoad = 1, yaw = 0, yawOffset = 0, use360 = 1;
     bool written = false, iniPresent = iniFile.good();
 
     text(L"Writing settings for car %s", car);
@@ -496,7 +526,7 @@ void Settings::writeSettingsForCar(char *car) {
             sscanf_s(
                 line.c_str(), INI_SCAN_FORMAT,
                 carName, sizeof(carName),
-                &type, &min, &max, &bumps, &load, &extraLong, &use360, &yaw
+                &type, &min, &max, &bumps, &load, &longLoad, &use360, &yaw, &yawOffset
             ) < 8
         ) {
             strcpy_s(buf, line.c_str());
@@ -511,7 +541,8 @@ void Settings::writeSettingsForCar(char *car) {
         sprintf_s(
             buf, INI_PRINT_FORMAT,
             car, ffbType, getMinForceSetting(), maxForce, getBumpsSetting(),
-            getLoadSetting(), extraLongLoad, use360ForDirect, (int)yawFactor
+            getLoadSetting(), longLoadFactor, use360ForDirect,
+            (int)sopFactor, getSopOffsetSetting()
         );
         writeWithNewline(tmpFile, buf);
         written = true;
@@ -521,7 +552,7 @@ void Settings::writeSettingsForCar(char *car) {
         goto MOVE;
 
     if (!iniPresent) {
-        sprintf_s(buf, "car:ffbType:minForce:maxForce:bumps:load:incrLongEff:effUse360:sop\r\n\r\n");
+        sprintf_s(buf, "car:ffbType:minForce:maxForce:bumps:load:longLoad:effUse360:sop:sopOffset\r\n\r\n");
         tmpFile.write(buf, strlen(buf));
         sprintf_s(buf, "ffbType     | 0 = 360, 1 = 360I, 2 = 60DF_360, 3 = 60DF_720\r\n");
         tmpFile.write(buf, strlen(buf));
@@ -533,18 +564,20 @@ void Settings::writeSettingsForCar(char *car) {
         tmpFile.write(buf, strlen(buf));
         sprintf_s(buf, "load        | min = 0, max = 100\r\n");
         tmpFile.write(buf, strlen(buf));
-        sprintf_s(buf, "incrLongEff | off = 0, on = 1\r\n");
+        sprintf_s(buf, "longLoad    | min = 1, max = 3\r\n");
         tmpFile.write(buf, strlen(buf));
         sprintf_s(buf, "effUse360   | off = 0, on = 1\r\n");
         tmpFile.write(buf, strlen(buf));
         sprintf_s(buf, "sop         | min = 0, max = 100\r\n\r\n");
+        tmpFile.write(buf, strlen(buf));
+        sprintf_s(buf, "sopOffset   | min = 0, max = 100\r\n\r\n");
         tmpFile.write(buf, strlen(buf));
     }
 
     sprintf_s(
         buf, INI_PRINT_FORMAT,
         car, ffbType, getMinForceSetting(), maxForce, getBumpsSetting(),
-        getLoadSetting(), extraLongLoad, use360ForDirect, (int)yawFactor
+        getLoadSetting(), longLoadFactor, use360ForDirect, (int)sopFactor, getSopOffsetSetting()
     );
     writeWithNewline(tmpFile, buf);
 

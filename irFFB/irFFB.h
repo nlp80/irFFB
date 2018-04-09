@@ -25,6 +25,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #define MAX_FFB_DEVICES 16
 #define DI_MAX 10000
+#define IR_MAX 9996
 #define MINFORCE_MULTIPLIER 100
 #define MIN_MAXFORCE 5
 #define MAX_MAXFORCE 65
@@ -37,8 +38,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define SETTINGS_KEY L"Software\\irFFB\\Settings"
 #define RUN_ON_STARTUP_KEY L"Software\\Microsoft\\Windows\\CurrentVersion\\Run"
 #define INI_PATH L"\\irFFB.ini"
-#define INI_SCAN_FORMAT  "%[^:]:%d:%d:%d:%d:%d:%d:%d:%d\r"
-#define INI_PRINT_FORMAT "%s:%d:%d:%d:%d:%d:%d:%d:%d\r"
+#define INI_SCAN_FORMAT  "%[^:]:%d:%d:%d:%d:%d:%d:%d:%d:%d"
+#define INI_PRINT_FORMAT "%s:%d:%d:%d:%d:%d:%d:%d:%d:%d\r"
 #define MAX_CAR_NAME 32
 #define MAX_LATENCY_TIMES 32
 #define LATENCY_MIN_DX 60

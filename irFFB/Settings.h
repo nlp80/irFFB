@@ -5,6 +5,15 @@
 class Settings {
 
     public:
+
+        static HKEY getSettingsRegKey();
+        static LSTATUS setRegSetting(HKEY, wchar_t *, int);
+        static LSTATUS setRegSetting(HKEY, wchar_t *, float);
+        static LSTATUS setRegSetting(HKEY, wchar_t *, bool);
+        static int getRegSetting(HKEY, wchar_t *, int);
+        static float getRegSetting(HKEY, wchar_t *, float);
+        static bool getRegSetting(HKEY, wchar_t *, bool);
+
         Settings();
         void setDevWnd(HWND);
         HWND getDevWnd();
@@ -41,20 +50,20 @@ class Settings {
         GUID getFfbDevice();
         void setFfbType(int);
         int getFfbType();
-        void setMinForce(int);
+        bool setMinForce(int, HWND);
         int getMinForce();
-        void setMaxForce(int);
+        bool setMaxForce(int, HWND);
         int getMaxForce();    
         float getScaleFactor();
-        void setBumpsFactor(int);
+        bool setBumpsFactor(float, HWND);
         float getBumpsFactor();
-        void setLoadFactor(int);
+        bool setLoadFactor(float, HWND);
         float getLoadFactor();
-        void setLongLoadFactor(int);
+        bool setLongLoadFactor(int, HWND);
         int getLongLoadFactor();
-        void setSopFactor(int);
+        bool setSopFactor(float, HWND);
         float getSopFactor();
-        void setSopOffset(int);
+        bool setSopOffset(float, HWND);
         float getSopOffset();
         void setUse360ForDirect(bool);
         bool getUse360ForDirect();
@@ -66,10 +75,10 @@ class Settings {
         bool getRunOnStartup();
         void setStartMinimised(bool);
         bool getStartMinimised();
-        int getBumpsSetting();
-        int getLoadSetting();
+        float getBumpsSetting();
+        float getLoadSetting();
         int getMinForceSetting();
-        int getSopOffsetSetting();
+        float getSopOffsetSetting();
         void writeCarSpecificSetting();
         void readRegSettings(char *);
         void readGenericSettings();

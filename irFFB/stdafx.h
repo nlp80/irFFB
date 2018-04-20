@@ -27,6 +27,13 @@
 #include <hidclass.h>
 #include <hidsdi.h>
 #include <SetupAPI.h>
+#include <winhttp.h>
+#include <cfgmgr32.h>
+#include <comdef.h>
+#include <RegStr.h>
+#include <newdev.h>
+#include <devguid.h>
+#include <sddl.h>
 
 #define DIRECTINPUT_VERSION 0x0800 
 #include <dinput.h>

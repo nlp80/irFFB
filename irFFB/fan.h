@@ -5,6 +5,7 @@
 
 #include "stdafx.h"
 #include "irFFB.h"
+#include "Settings.h"
 
 typedef struct {
     wchar_t *name;

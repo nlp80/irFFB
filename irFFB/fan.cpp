@@ -84,7 +84,7 @@ void Fan::createWindow(HINSTANCE hInst) {
     SendMessage(speedUnitsWnd, CB_ADDSTRING, 0, LPARAM(unitStrings[MPH]));
     SendMessage(speedUnitsWnd, CB_ADDSTRING, 0, LPARAM(unitStrings[KPH]));
 
-    manualWnd = slider(mainWnd, L"Manual fan speed:", 40, 234, L"0", L"100");
+    manualWnd = slider(mainWnd, L"Manual fan speed:", 40, 234, L"0", L"100", false);
 
     setManualSpeed((int)manualSpeed);
     ShowWindow(mainWnd, SW_SHOWNORMAL);
@@ -426,69 +426,53 @@ void Fan::setManualSpeed() {
 
 void Fan::readSettings() {
 
-    HKEY regKey;
-    DWORD val;
-    DWORD sz = sizeof(val);
+    HKEY key = Settings::getSettingsRegKey();
 
     if (fanPort != nullptr)
         delete[] fanPort;
 
-    fanPort = new wchar_t[128];
-    DWORD fanPortSize = 128 * sizeof(wchar_t);
-
-    if (!RegOpenKeyEx(HKEY_CURRENT_USER, SETTINGS_KEY, 0, KEY_ALL_ACCESS, &regKey)) {
-
-        if (RegGetValueW(regKey, nullptr, L"fanPort", RRF_RT_REG_SZ, nullptr, fanPort, &fanPortSize)) {
-            delete[] fanPort;
-            fanPort = nullptr;
-        }
-        if (RegGetValueW(regKey, nullptr, L"fanWindSimFormat", RRF_RT_REG_DWORD, nullptr, &val, &sz))
-            setWindSimFormat(true);
-        else
-            setWindSimFormat(val > 0);
-        if (RegGetValueW(regKey, nullptr, L"fanMaxSpeed", RRF_RT_REG_DWORD, nullptr, &val, &sz))
-            setMaxSpeed(120);
-        else
-            setMaxSpeed(val);
-        if (RegGetValueW(regKey, nullptr, L"fanMaxSpeedUnits", RRF_RT_REG_DWORD, nullptr, &val, &sz))
-            setSpeedUnits(MPH);
-        else
-            setSpeedUnits(val);
-    
-    }
-    else {
+    if (key == NULL) {
         setWindSimFormat(true);
         delete[] fanPort;
         fanPort = nullptr;
         setMaxSpeed(120);
         setSpeedUnits(MPH);
+        return;
     }
-        
+
+    fanPort = new wchar_t[128];
+    DWORD fanPortSize = 128 * sizeof(wchar_t);
+
+    if (RegGetValueW(key, nullptr, L"fanPort", RRF_RT_REG_SZ, nullptr, fanPort, &fanPortSize)) {
+        delete[] fanPort;
+        fanPort = nullptr;
+    }
+    
+    setWindSimFormat(Settings::getRegSetting(key, L"fanWindSimFormat", true));
+    setMaxSpeed(Settings::getRegSetting(key, L"fanMaxSpeed", 120));
+    setSpeedUnits(Settings::getRegSetting(key, L"fanMaxSpeedUnits", MPH));
+
+    RegCloseKey(key);
+
 }
 
 void Fan::writeSettings() {
 
-    HKEY regKey;
-    DWORD sz = sizeof(int);
-    DWORD windSim = windSimFormat;
+    HKEY key = Settings::getSettingsRegKey();
     DWORD fanPortSz = 0;
     
-    if (fanPort)
+    if (key == NULL)
+        return;
+    
+    if (fanPort) {
         fanPortSz = (lstrlen(fanPort) + 1) * sizeof(wchar_t);
-
-    RegCreateKeyEx(
-        HKEY_CURRENT_USER, SETTINGS_KEY, 0, nullptr,
-        REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, nullptr, &regKey, nullptr
-    );
-
-    if (!RegOpenKeyEx(HKEY_CURRENT_USER, SETTINGS_KEY, 0, KEY_ALL_ACCESS, &regKey)) {
-
-        if (fanPort)
-            RegSetValueEx(regKey, L"fanPort", 0, REG_SZ, (BYTE *)fanPort, fanPortSz);
-        RegSetValueEx(regKey, L"fanWindSimFormat", 0, REG_DWORD, (BYTE *)&windSim, sz);
-        RegSetValueEx(regKey, L"fanMaxSpeed", 0, REG_DWORD, (BYTE *)&maxSpeed, sz);
-        RegSetValueEx(regKey, L"fanMaxSpeedUnits", 0, REG_DWORD, (BYTE *)&units, sz);
-
+        RegSetValueEx(key, L"fanPort", 0, REG_SZ, (BYTE *)fanPort, fanPortSz);
     }
+        
+    Settings::setRegSetting(key, L"fanWindSimFormat", windSimFormat);
+    Settings::setRegSetting(key, L"fanMaxSpeed", maxSpeed);
+    Settings::setRegSetting(key, L"fanMaxSpeedUnits", units);
+
+    RegCloseKey(key);
 
 }

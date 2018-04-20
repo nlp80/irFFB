@@ -554,45 +554,9 @@ void JetSeat::yawEffect(float f) {
 
 void JetSeat::readSettings() {
 
-    HKEY regKey;
-    DWORD dval;
-    float fval;
-    DWORD sz = sizeof(dval);
+    HKEY key = Settings::getSettingsRegKey();
 
-    if (!RegOpenKeyEx(HKEY_CURRENT_USER, SETTINGS_KEY, 0, KEY_ALL_ACCESS, &regKey)) {
-
-        if (RegGetValueW(regKey, nullptr, L"jsGearPlace", RRF_RT_REG_DWORD, nullptr, &dval, &sz))
-            setGearPlace(BACK);
-        else
-            setGearPlace(dval);
-
-        if (RegGetValue(regKey, nullptr, L"jsEnginePlace", RRF_RT_REG_DWORD, nullptr, &dval, &sz))
-            setEnginePlace(ALL);
-        else
-            setEnginePlace(dval);
-        if (RegGetValue(regKey, nullptr, L"jsGearGain", RRF_RT_REG_DWORD, nullptr, &fval, &sz))
-            setGearGain(80);
-        else
-            setGearGain(fval);
-        if (RegGetValue(regKey, nullptr, L"jsEngineGain", RRF_RT_REG_DWORD, nullptr, &fval, &sz))
-            setEngineGain(0);
-        else
-            setEngineGain(fval);
-        if (RegGetValue(regKey, nullptr, L"jsBumpsGain", RRF_RT_REG_DWORD, nullptr, &fval, &sz))
-            setBumpsGain(80);
-        else
-            setBumpsGain(fval);
-        if (RegGetValue(regKey, nullptr, L"jsYawGain", RRF_RT_REG_DWORD, nullptr, &fval, &sz))
-            setYawGain(80);
-        else
-            setYawGain(fval);
-        if (RegGetValue(regKey, nullptr, L"jsEnabled", RRF_RT_REG_DWORD, nullptr, &dval, &sz))
-            setEnabled(true);
-        else
-            setEnabled(dval > 0);
-
-    }
-    else {
+    if (key == NULL) {
         setGearPlace(BACK);
         setEnginePlace(ALL);
         setGearGain(80);
@@ -602,32 +566,34 @@ void JetSeat::readSettings() {
         setEnabled(true);
     }
 
+    setGearPlace(Settings::getRegSetting(key, L"jsGearPlace", BACK));
+    setEnginePlace(Settings::getRegSetting(key, L"jsEnginePlace", ALL));
+    setGearGain(Settings::getRegSetting(key, L"jsGearGain", 80.0f));
+    setEngineGain(Settings::getRegSetting(key, L"jsEngineGain", 0.0f));
+    setBumpsGain(Settings::getRegSetting(key, L"jsBumpsGain", 80.0f));
+    setYawGain(Settings::getRegSetting(key, L"jsYawGain", 80.0f));
+    setEnabled(Settings::getRegSetting(key, L"jsEnabled", true));
+
+    RegCloseKey(key);
+
 }
 
 void JetSeat::writeSettings() {
 
-    HKEY regKey;
-    DWORD sz = sizeof(int);
-    DWORD gearP = getGearPlace();
-    DWORD engineP = getEnginePlace();
-    DWORD enabled = isEnabled();
+    HKEY key = Settings::getSettingsRegKey();
 
-    RegCreateKeyEx(
-        HKEY_CURRENT_USER, SETTINGS_KEY, 0, nullptr,
-        REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, nullptr, &regKey, nullptr
-    );
+    if (key == NULL)
+        return;
 
-    if (!RegOpenKeyEx(HKEY_CURRENT_USER, SETTINGS_KEY, 0, KEY_ALL_ACCESS, &regKey)) {
+    Settings::setRegSetting(key, L"jsGearPlace", gearPlace);
+    Settings::setRegSetting(key, L"jsEnginePlace", enginePlace);
+    Settings::setRegSetting(key, L"jsGearGain", gearGain);
+    Settings::setRegSetting(key, L"jsEngineGain", engineGain);
+    Settings::setRegSetting(key, L"jsBumpsGain", bumpsGain);
+    Settings::setRegSetting(key, L"jsYawGain", yawGain);
+    Settings::setRegSetting(key, L"jsEnabled", enabled);
 
-        RegSetValueEx(regKey, L"jsGearPlace", 0, REG_DWORD, (BYTE *)&gearP, sz);
-        RegSetValueEx(regKey, L"jsEnginePlace", 0, REG_DWORD, (BYTE *)&engineP, sz);
-        RegSetValueEx(regKey, L"jsGearGain", 0, REG_DWORD, (BYTE *)&gearGain, sz);
-        RegSetValueEx(regKey, L"jsEngineGain", 0, REG_DWORD, (BYTE *)&engineGain, sz);
-        RegSetValueEx(regKey, L"jsBumpsGain", 0, REG_DWORD, (BYTE *)&bumpsGain, sz);
-        RegSetValueEx(regKey, L"jsYawGain", 0, REG_DWORD, (BYTE *)&yawGain, sz);
-        RegSetValueEx(regKey, L"jsEnabled", 0, REG_DWORD, (BYTE *)&enabled, sz);
-
-    }
+    RegCloseKey(key);
 
 }
 

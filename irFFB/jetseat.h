@@ -6,6 +6,7 @@
 
 #include "stdafx.h"
 #include "irFFB.h"
+#include "settings.h"
 #include "IUberwoorf.h"
 
 

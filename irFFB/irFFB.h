@@ -28,7 +28,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define IR_MAX 9996
 #define MINFORCE_MULTIPLIER 100
 #define MIN_MAXFORCE 5
-#define MAX_MAXFORCE 65
+#define MAX_MAXFORCE 300
 #define BUMPSFORCE_MULTIPLIER 1.6f
 #define LOADFORCE_MULTIPLIER 0.08f
 #define LONGLOAD_STDPOWER 4
@@ -38,13 +38,16 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define SETTINGS_KEY L"Software\\irFFB\\Settings"
 #define RUN_ON_STARTUP_KEY L"Software\\Microsoft\\Windows\\CurrentVersion\\Run"
 #define INI_PATH L"\\irFFB.ini"
-#define INI_SCAN_FORMAT  "%[^:]:%d:%d:%d:%d:%d:%d:%d:%d:%d"
-#define INI_PRINT_FORMAT "%s:%d:%d:%d:%d:%d:%d:%d:%d:%d\r"
+#define INI_SCAN_FORMAT  "%[^:]:%d:%d:%d:%f:%f:%d:%d:%f:%f"
+#define INI_PRINT_FORMAT "%s:%d:%d:%d:%0.1f:%0.1f:%d:%d:%0.1f:%0.1f\r"
 #define MAX_CAR_NAME 32
 #define MAX_LATENCY_TIMES 32
 #define LATENCY_MIN_DX 60
 #define HID_CLASS_GUID { 0x745a17a0, 0x74d3, 0x11d0, 0xb6, 0xfe, 0x00, 0xa0, 0xc9, 0x0f, 0x57, 0xda };
 #define WM_TRAY_ICON WM_USER+1
+#define WM_EDIT_VALUE WM_USER+2
+#define EDIT_INT 0
+#define EDIT_FLOAT 1
 #define ID_TRAY_EXIT 40000
 #define SVCNAME L"irFFBsvc"
 
@@ -69,6 +72,7 @@ enum ffbType {
 
 typedef struct sWins {
     HWND trackbar;
+    HWND label;
     HWND value;
 } sWins_t;
 
@@ -93,7 +97,7 @@ LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
 INT_PTR CALLBACK About(HWND, UINT, WPARAM, LPARAM);
 
 HWND combo(HWND, wchar_t *, int, int); 
-sWins_t *slider(HWND, wchar_t *, int, int, wchar_t *, wchar_t *);
+sWins_t *slider(HWND, wchar_t *, int, int, wchar_t *, wchar_t *, bool);
 HWND checkbox(HWND, wchar_t *, int, int); 
 
 bool initVJD();

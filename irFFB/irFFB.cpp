@@ -1131,9 +1131,11 @@ int APIENTRY wWinMain(
             while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
                 if (msg.message == WM_QUIT)
                     DestroyWindow(mainWnd);
-                if (!TranslateAccelerator(msg.hwnd, hAccelTable, &msg)) {
-                    TranslateMessage(&msg);
-                    DispatchMessage(&msg);
+                if (!IsDialogMessage(mainWnd, &msg)) {
+                    if (!TranslateAccelerator(msg.hwnd, hAccelTable, &msg)) {
+                        TranslateMessage(&msg);
+                        DispatchMessage(&msg);
+                    }
                 }
             }
 
@@ -1167,6 +1169,67 @@ ATOM MyRegisterClass(HINSTANCE hInstance) {
 
 }
 
+LRESULT CALLBACK EditWndProc(HWND wnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR subId, DWORD_PTR rData) {
+
+    if (msg == WM_CHAR) {
+
+        wchar_t buf[8];
+
+        if (subId == EDIT_FLOAT) {
+
+            if (GetWindowTextW(wnd, buf, 8) && StrChrIW(buf, L'.') && wParam == '.')
+                return 0;
+
+            if (
+                !(
+                    (wParam >= L'0' && wParam <= L'9') ||
+                    wParam == L'.' ||
+                    wParam == VK_RETURN ||
+                    wParam == VK_DELETE ||
+                    wParam == VK_BACK
+                )
+            )
+                return 0;
+
+            LRESULT ret = DefSubclassProc(wnd, msg, wParam, lParam);
+
+            wchar_t *end;
+            float val = 0.0f;
+
+            GetWindowText(wnd, buf, 8);
+            val = wcstof(buf, &end);
+            if (end - buf == wcslen(buf))
+                SendMessage(GetParent(wnd), WM_EDIT_VALUE, reinterpret_cast<WPARAM &>(val), (LPARAM)wnd);
+
+            return ret;
+
+        }
+        else {
+
+            if (
+                !(
+                    (wParam >= L'0' && wParam <= L'9') ||
+                    wParam == VK_RETURN ||
+                    wParam == VK_DELETE ||
+                    wParam == VK_BACK
+                )
+            )
+                return 0;
+
+            LRESULT ret = DefSubclassProc(wnd, msg, wParam, lParam);
+            GetWindowText(wnd, buf, 8);
+            int val = _wtoi(buf);
+            SendMessage(GetParent(wnd), WM_EDIT_VALUE, (WPARAM)val, (LPARAM)wnd);
+            return ret;
+
+        }
+
+    }
+
+    return DefSubclassProc(wnd, msg, wParam, lParam);
+
+}
+
 HWND combo(HWND parent, wchar_t *name, int x, int y) {
 
     CreateWindowW(
@@ -1183,19 +1246,29 @@ HWND combo(HWND parent, wchar_t *name, int x, int y) {
 
 }
 
-sWins_t *slider(HWND parent, wchar_t *name, int x, int y, wchar_t *start, wchar_t *end) {
+sWins_t *slider(HWND parent, wchar_t *name, int x, int y, wchar_t *start, wchar_t *end, bool floatData) {
 
     sWins_t *wins = (sWins_t *)malloc(sizeof(sWins_t));
 
-    wins->value = CreateWindowW(
+    wins->label = CreateWindowW(
         L"STATIC", name,
         WS_CHILD | WS_VISIBLE,
         x, y, 300, 20, parent, NULL, hInst, NULL
     );
 
+    wins->value = CreateWindowW(
+        L"EDIT", L"", 
+        WS_CHILD | WS_VISIBLE | WS_BORDER | WS_TABSTOP | ES_CENTER,
+        x + 210, y, 50, 20, parent, NULL, hInst, NULL
+    );
+
+    SetWindowSubclass(wins->value, EditWndProc, floatData ? 1 : 0, 0);
+
+    SendMessage(wins->value, EM_SETLIMITTEXT, 5, 0);
+
     wins->trackbar = CreateWindowExW(
         0, TRACKBAR_CLASS, name,
-        WS_CHILD | WS_VISIBLE | TBS_TOOLTIPS | TBS_TRANSPARENTBKGND,
+        WS_CHILD | WS_VISIBLE | WS_TABSTOP | TBS_TOOLTIPS | TBS_TRANSPARENTBKGND,
         x + 40, y + 26, 240, 30,
         parent, NULL, hInst, NULL
     );
@@ -1223,7 +1296,7 @@ HWND checkbox(HWND parent, wchar_t *name, int x, int y) {
     return 
         CreateWindowEx(
             0, L"BUTTON", name,
-            BS_CHECKBOX | BS_MULTILINE | WS_CHILD | WS_VISIBLE,
+            BS_CHECKBOX | BS_MULTILINE | WS_CHILD | WS_TABSTOP | WS_VISIBLE,
             x, y, 360, 58, parent, nullptr, hInst, nullptr
         );
 
@@ -1256,14 +1329,14 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow) {
 
     settings.setDevWnd(combo(mainWnd, L"FFB device:", 44, 20));
     settings.setFfbWnd(combo(mainWnd, L"FFB type:", 44, 80));
-    settings.setMinWnd(slider(mainWnd, L"Min force:", 44, 154, L"0", L"20"));
-    settings.setMaxWnd(slider(mainWnd, L"Max force:", 44, 226, L"5 Nm", L"65 Nm"));
-    settings.setBumpsWnd(slider(mainWnd, L"Suspension bumps:", 464, 40, L"0", L"100"));
-    settings.setLoadWnd(slider(mainWnd, L"Suspension load:", 464, 100, L"0", L"100"));
-    settings.setLongLoadWnd(slider(mainWnd, L"Longitudinal load factor:", 464, 160, L"1", L"3"));
+    settings.setMinWnd(slider(mainWnd, L"Min force:", 44, 154, L"0", L"20", false));
+    settings.setMaxWnd(slider(mainWnd, L"Max force:", 44, 226, L"5 Nm", L"65 Nm", false));
+    settings.setBumpsWnd(slider(mainWnd, L"Suspension bumps:", 464, 40, L"0", L"100", true));
+    settings.setLoadWnd(slider(mainWnd, L"Suspension load:", 464, 100, L"0", L"100", true));
+    settings.setLongLoadWnd(slider(mainWnd, L"Longitudinal load factor:", 464, 160, L"1", L"3", false));
     SendMessage(settings.getLongLoadWnd()->trackbar, TBM_SETRANGE, true, MAKELPARAM(1, 3));
-    settings.setSopWnd(slider(mainWnd, L"SoP effect:", 464, 220, L"0", L"100"));
-    settings.setSopOffsetWnd(slider(mainWnd, L"SoP deadzone:", 464, 280, L"0", L"100"));
+    settings.setSopWnd(slider(mainWnd, L"SoP effect:", 464, 220, L"0", L"100", true));
+    settings.setSopOffsetWnd(slider(mainWnd, L"SoP deadzone:", 464, 280, L"0", L"100", true));
     settings.setUse360Wnd(
         checkbox(
             mainWnd, 
@@ -1316,6 +1389,8 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow) {
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
 
+    HWND wnd = (HWND)lParam;
+
     switch (message) {
 
         case WM_COMMAND: {
@@ -1340,7 +1415,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                     hidGuardian->createWindow(hInst);
                 default:
                     if (HIWORD(wParam) == CBN_SELCHANGE) {
-                        if ((HWND)lParam == settings.getDevWnd()) {
+                        if (wnd == settings.getDevWnd()) {
                             GUID oldDevice = settings.getFfbDevice();
                             DWORD vidpid = 0;  
                             if (oldDevice != GUID_NULL)
@@ -1349,23 +1424,23 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                             if (vidpid != 0 && oldDevice != settings.getFfbDevice())
                                 hidGuardian->removeDevice(LOWORD(vidpid), HIWORD(vidpid), false);
                         }
-                        else if ((HWND)lParam == settings.getFfbWnd())
+                        else if (wnd == settings.getFfbWnd())
                             settings.setFfbType(SendMessage((HWND)lParam, CB_GETCURSEL, 0, 0));
                     }
                     else if (HIWORD(wParam) == BN_CLICKED) {
                         bool oldValue = SendMessage((HWND)lParam, BM_GETCHECK, 0, 0) == BST_CHECKED;
-                        if ((HWND)lParam == settings.getUse360Wnd())
+                        if (wnd == settings.getUse360Wnd())
                             settings.setUse360ForDirect(!oldValue);
-                        else if ((HWND)lParam == settings.getCarSpecificWnd()) {
+                        else if (wnd == settings.getCarSpecificWnd()) {
                             if (!oldValue)
                                 getCarName();
                             settings.setUseCarSpecific(!oldValue, car);
                         }
-                        else if ((HWND)lParam == settings.getReduceWhenParkedWnd())
+                        else if (wnd == settings.getReduceWhenParkedWnd())
                             settings.setReduceWhenParked(!oldValue);
-                        else if ((HWND)lParam == settings.getRunOnStartupWnd())
+                        else if (wnd == settings.getRunOnStartupWnd())
                             settings.setRunOnStartup(!oldValue);
-                        else if ((HWND)lParam == settings.getStartMinimisedWnd())
+                        else if (wnd == settings.getStartMinimisedWnd())
                             settings.setStartMinimised(!oldValue);
                     }
                     return DefWindowProc(hWnd, message, wParam, lParam);
@@ -1373,21 +1448,40 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         }
         break;
 
+        case WM_EDIT_VALUE: {
+            if (wnd == settings.getMaxWnd()->value)
+                settings.setMaxForce(wParam, wnd);
+            else if (wnd == settings.getMinWnd()->value)
+                settings.setMinForce(wParam, wnd);
+            else if (wnd == settings.getBumpsWnd()->value)
+                settings.setBumpsFactor(reinterpret_cast<float &>(wParam), wnd);
+            else if (wnd == settings.getLoadWnd()->value)
+                settings.setLoadFactor(reinterpret_cast<float &>(wParam), wnd);
+            else if (wnd == settings.getLongLoadWnd()->value)
+                settings.setLongLoadFactor(wParam, wnd);
+            else if (wnd == settings.getSopWnd()->value)
+                settings.setSopFactor(reinterpret_cast<float &>(wParam), wnd);
+            else if (wnd == settings.getSopOffsetWnd()->value)
+                settings.setSopOffset(reinterpret_cast<float &>(wParam), wnd);
+        }
+        break;
+             
+
         case WM_HSCROLL: {
-            if ((HWND)lParam == settings.getMaxWnd()->trackbar)
-                settings.setMaxForce(SendMessage((HWND)lParam, TBM_GETPOS, 0, 0));
-            else if ((HWND)lParam == settings.getMinWnd()->trackbar)
-                settings.setMinForce(SendMessage((HWND)lParam, TBM_GETPOS, 0, 0));
-            else if ((HWND)lParam == settings.getBumpsWnd()->trackbar)
-                settings.setBumpsFactor(SendMessage((HWND)lParam, TBM_GETPOS, 0, 0));
-            else if ((HWND)lParam == settings.getLoadWnd()->trackbar)
-                settings.setLoadFactor(SendMessage((HWND)lParam, TBM_GETPOS, 0, 0));
-            else if ((HWND)lParam == settings.getLongLoadWnd()->trackbar)
-                settings.setLongLoadFactor(SendMessage((HWND)lParam, TBM_GETPOS, 0, 0));
-            else if ((HWND)lParam == settings.getSopWnd()->trackbar)
-                settings.setSopFactor(SendMessage((HWND)lParam, TBM_GETPOS, 0, 0));
-            else if ((HWND)lParam == settings.getSopOffsetWnd()->trackbar)
-                settings.setSopOffset(SendMessage((HWND)lParam, TBM_GETPOS, 0, 0));
+            if (wnd == settings.getMaxWnd()->trackbar)
+                settings.setMaxForce(SendMessage(wnd, TBM_GETPOS, 0, 0), wnd);
+            else if (wnd == settings.getMinWnd()->trackbar)
+                settings.setMinForce(SendMessage(wnd, TBM_GETPOS, 0, 0), wnd);
+            else if (wnd == settings.getBumpsWnd()->trackbar)
+                settings.setBumpsFactor((float)SendMessage(wnd, TBM_GETPOS, 0, 0), wnd);
+            else if (wnd == settings.getLoadWnd()->trackbar)
+                settings.setLoadFactor((float)SendMessage(wnd, TBM_GETPOS, 0, 0), wnd);
+            else if (wnd == settings.getLongLoadWnd()->trackbar)
+                settings.setLongLoadFactor(SendMessage(wnd, TBM_GETPOS, 0, 0), wnd);
+            else if (wnd == settings.getSopWnd()->trackbar)
+                settings.setSopFactor((float)SendMessage(wnd, TBM_GETPOS, 0, 0), wnd);
+            else if (wnd == settings.getSopOffsetWnd()->trackbar)
+                settings.setSopOffset((float)SendMessage(wnd, TBM_GETPOS, 0, 0), wnd);
         }
         break;
 
@@ -1855,11 +1949,16 @@ void reacquireDIDevice() {
     ffdevice->Unacquire();
     ffdevice->Acquire();
 
-    if (effect) {
-        hr = effect->SetParameters(&dieff, DIEP_TYPESPECIFICPARAMS | DIEP_START);
-        if (hr == DIERR_NOTINITIALIZED || hr == DIERR_INPUTLOST || hr == DIERR_INCOMPLETEEFFECT || hr == DIERR_INVALIDPARAM)
-            text(L"Error setting parameters of DIEFFECT: 0x%x", hr);
+    if (effect == nullptr) {
+        if (FAILED(ffdevice->CreateEffect(GUID_Sine, &dieff, &effect, nullptr))) {
+            text(L"Failed to create periodic effect during reacquire");
+            return;
+        }
     }
+
+    hr = effect->SetParameters(&dieff, DIEP_TYPESPECIFICPARAMS | DIEP_START);
+    if (hr == DIERR_NOTINITIALIZED || hr == DIERR_INPUTLOST || hr == DIERR_INCOMPLETEEFFECT || hr == DIERR_INVALIDPARAM)
+        text(L"Error setting parameters of DIEFFECT during reacquire: 0x%x", hr);
 
 }
 

@@ -2,6 +2,79 @@
 #include <fstream>
 #include <iostream>
 #include <string>
+
+HKEY Settings::getSettingsRegKey() {
+
+    HKEY key;
+    if (
+        RegCreateKeyExW(
+            HKEY_CURRENT_USER, SETTINGS_KEY, 0, nullptr,
+            REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, nullptr, &key, nullptr
+        )
+    )
+        return NULL;
+    return key;
+    
+}
+
+LSTATUS Settings::setRegSetting(HKEY key, wchar_t *name, int val) {
+    
+    DWORD sz = sizeof(int);
+    return RegSetValueExW(key, name, 0, REG_DWORD, (BYTE *)&val, sz);
+
+}
+
+LSTATUS Settings::setRegSetting(HKEY key, wchar_t *name, float val) {
+
+    DWORD sz = sizeof(float);
+    return RegSetValueExW(key, name, 0, REG_DWORD, (BYTE *)&val, sz);
+
+}
+
+
+LSTATUS Settings::setRegSetting(HKEY key, wchar_t *name, bool val) {
+
+    DWORD sz = sizeof(DWORD);
+    DWORD dw = val ? 1 : 0;
+    return RegSetValueExW(key, name, 0, REG_DWORD, (BYTE *)&dw, sz);
+
+}
+
+int Settings::getRegSetting(HKEY key, wchar_t *name, int def) {
+
+    int val;
+    DWORD sz = sizeof(int);
+
+    if (RegGetValue(key, nullptr, name, RRF_RT_REG_DWORD, nullptr, &val, &sz))
+        return def;
+    else
+        return val;
+
+}
+
+float Settings::getRegSetting(HKEY key, wchar_t *name, float def) {
+
+    float val;
+    DWORD sz = sizeof(float);
+
+    if (RegGetValue(key, nullptr, name, RRF_RT_REG_DWORD, nullptr, &val, &sz))
+        return def;
+    else
+        return val;
+
+}
+
+bool Settings::getRegSetting(HKEY key, wchar_t *name, bool def) {
+
+    DWORD val, sz = sizeof(DWORD);
+
+    if (RegGetValue(key, nullptr, name, RRF_RT_REG_DWORD, nullptr, &val, &sz))
+        return def;
+    else
+        return val > 0;
+
+}
+
     
 Settings::Settings() {
     memset(ffdevices, 0, MAX_FFB_DEVICES * sizeof(GUID));
@@ -27,7 +100,7 @@ sWins_t *Settings::getMinWnd() { return minWnd; }
         
 void Settings::setMaxWnd(sWins_t *wnd) { 
     maxWnd = wnd;
-    SendMessage(maxWnd->trackbar, TBM_SETRANGE, TRUE, MAKELPARAM(MIN_MAXFORCE, MAX_MAXFORCE));
+    SendMessage(maxWnd->trackbar, TBM_SETRANGE, TRUE, MAKELPARAM(MIN_MAXFORCE, 65));
 }
 sWins_t *Settings::getMaxWnd() { return maxWnd; }
 
@@ -105,83 +178,111 @@ void Settings::setFfbType(int type) {
 }
 int Settings::getFfbType() { return ffbType; }
 
-void Settings::setMinForce(int min) {
-    if (min < 0 || min > 20)
-        return;
+bool Settings::setMinForce(int min, HWND wnd) {
+    if (min < 0.0f || min > 20.0f)
+        return false;
     minForce = min * MINFORCE_MULTIPLIER;
-    SendMessage(minWnd->trackbar, TBM_SETPOS, TRUE, min);
-    swprintf_s(strbuf, L"Min force  [ %d ]", min);
-    SendMessage(minWnd->value, WM_SETTEXT, NULL, LPARAM(strbuf));
+    if (wnd != minWnd->trackbar)
+        SendMessage(minWnd->trackbar, TBM_SETPOS, TRUE, min);
+    if (wnd != minWnd->value) {
+        swprintf_s(strbuf, L"%d", min);
+        SendMessage(minWnd->value, WM_SETTEXT, NULL, LPARAM(strbuf));
+    }
+    return true;
 }
 int Settings::getMinForce() { return minForce; }
  
-void Settings::setMaxForce(int max) {
+bool Settings::setMaxForce(int max, HWND wnd) {
     if (max < MIN_MAXFORCE || max > MAX_MAXFORCE)
-        return;
+        return false;
     maxForce = max;
-    SendMessage(maxWnd->trackbar, TBM_SETPOS, TRUE, maxForce);
-    swprintf_s(strbuf, L"Max force  [ %d Nm ]", max);
-    SendMessage(maxWnd->value, WM_SETTEXT, NULL, LPARAM(strbuf));
+    if (wnd != maxWnd->trackbar)
+        SendMessage(maxWnd->trackbar, TBM_SETPOS, TRUE, maxForce);
+    if (wnd != maxWnd->value) {
+        swprintf_s(strbuf, L"%d", max);
+        SendMessage(maxWnd->value, WM_SETTEXT, NULL, LPARAM(strbuf));
+    }
     scaleFactor = (float)DI_MAX / maxForce;
     irsdk_broadcastMsg(
         irsdk_BroadcastFFBCommand, irsdk_FFBCommand_MaxForce, (float)maxForce
     );
+    return true;
 }
 int Settings::getMaxForce() { return maxForce; }
 
 float Settings::getScaleFactor() { return scaleFactor; }
 
-void Settings::setBumpsFactor(int factor) {
-    if (factor < 0 || factor > 100)
-        return;
+bool Settings::setBumpsFactor(float factor, HWND wnd) {
+    if (factor < 0.0f || factor > 100.0f)
+        return false;
     bumpsFactor = pow((float)factor, 2) * BUMPSFORCE_MULTIPLIER;
-    SendMessage(bumpsWnd->trackbar, TBM_SETPOS, TRUE, factor);
-    swprintf_s(strbuf, L"Suspension bumps  [ %d ]", factor);
-    SendMessage(bumpsWnd->value, WM_SETTEXT, NULL, LPARAM(strbuf));
+    if (wnd != bumpsWnd->trackbar)
+        SendMessage(bumpsWnd->trackbar, TBM_SETPOS, TRUE, (int)factor);
+    if (wnd != bumpsWnd->value) {
+        swprintf_s(strbuf, L"%.1f", factor);
+        SendMessage(bumpsWnd->value, WM_SETTEXT, NULL, LPARAM(strbuf));
+    }
+    return true;
 }
 float Settings::getBumpsFactor() { return bumpsFactor; }
 
-void Settings::setLoadFactor(int factor) {
-    if (factor < 0 || factor > 100)
-        return;
-    loadFactor = pow((float)factor, 2) * LOADFORCE_MULTIPLIER;
-    SendMessage(loadWnd->trackbar, TBM_SETPOS, TRUE, factor);
-    swprintf_s(strbuf, L"Suspension load  [ %d ]", factor);
-    SendMessage(loadWnd->value, WM_SETTEXT, NULL, LPARAM(strbuf));
+bool Settings::setLoadFactor(float factor, HWND wnd) {
+    if (factor < 0.0f || factor > 100.0f)
+        return false;
+    loadFactor = pow(factor, 2) * LOADFORCE_MULTIPLIER;
+    if (wnd != loadWnd->trackbar)
+        SendMessage(loadWnd->trackbar, TBM_SETPOS, TRUE, (int)factor);
+    if (wnd != loadWnd->value) {
+        swprintf_s(strbuf, L"%.1f", factor);
+        SendMessage(loadWnd->value, WM_SETTEXT, NULL, LPARAM(strbuf));
+    }
     EnableWindow(longLoadWnd->trackbar, factor != 0);
+    return true;
 }
 float Settings::getLoadFactor() { return loadFactor; }
 
-void Settings::setLongLoadFactor(int factor) {
+bool Settings::setLongLoadFactor(int factor, HWND wnd) {
     if (factor < 0 || factor > 3)
-        return;
+        return false;
     if (factor < 1)
         factor = 1;
     longLoadFactor = factor;
-    SendMessage(longLoadWnd->trackbar, TBM_SETPOS, TRUE, factor);
-    swprintf_s(strbuf, L"Longitudinal factor  [ %d ]", factor);
-    SendMessage(longLoadWnd->value, WM_SETTEXT, NULL, LPARAM(strbuf));
+    if (wnd != longLoadWnd->trackbar)
+        SendMessage(longLoadWnd->trackbar, TBM_SETPOS, TRUE, factor);
+    if (wnd != longLoadWnd->value) {
+        swprintf_s(strbuf, L"%d", factor);
+        SendMessage(longLoadWnd->value, WM_SETTEXT, NULL, LPARAM(strbuf));
+    }
+    return true;
 }
 int Settings::getLongLoadFactor() { return longLoadFactor; }
 
-void Settings::setSopFactor(int factor) {
-    if (factor < 0 || factor > 100)
-        return;
-    sopFactor = (float)factor;
-    SendMessage(sopWnd->trackbar, TBM_SETPOS, TRUE, factor);
-    swprintf_s(strbuf, L"SoP  [ %d ]", factor);
-    SendMessage(sopWnd->value, WM_SETTEXT, NULL, LPARAM(strbuf));
+bool Settings::setSopFactor(float factor, HWND wnd) {
+    if (factor < 0.0f || factor > 100.0f)
+        return false;
+    sopFactor = factor;
+    if (wnd != sopWnd->trackbar)
+        SendMessage(sopWnd->trackbar, TBM_SETPOS, TRUE, (int)factor);
+    if (wnd != sopWnd->value) {
+        swprintf_s(strbuf, L"%.1f", factor);
+        SendMessage(sopWnd->value, WM_SETTEXT, NULL, LPARAM(strbuf));
+    }
     EnableWindow(sopOffsetWnd->trackbar, factor != 0);
+    return true;
 }
 float Settings::getSopFactor() { return sopFactor; }
 
-void Settings::setSopOffset(int offset) {
-    if (offset < 0 || offset > 100)
-        return;
-    sopOffset = (float)offset / 572.958f;
-    SendMessage(sopOffsetWnd->trackbar, TBM_SETPOS, TRUE, offset);
-    swprintf_s(strbuf, L"SoP offset  [ %d ]", offset);
-    SendMessage(sopOffsetWnd->value, WM_SETTEXT, NULL, LPARAM(strbuf));
+bool Settings::setSopOffset(float offset, HWND wnd) {
+    if (offset < 0.0f || offset > 100.0f)
+        return false;
+    sopOffset = offset / 572.958f;
+    if (wnd != sopOffsetWnd->trackbar)
+        SendMessage(sopOffsetWnd->trackbar, TBM_SETPOS, TRUE, (int)offset);
+    if (wnd != sopOffsetWnd->value) {
+        swprintf_s(strbuf, L"%.1f", offset);
+        SendMessage(sopOffsetWnd->value, WM_SETTEXT, NULL, LPARAM(strbuf));
+    }
+    return true;
 }
 float Settings::getSopOffset() { return sopOffset; }
 
@@ -241,6 +342,8 @@ void Settings::setRunOnStartup(bool run) {
     else
         RegDeleteValueW(regKey, L"irFFB");
 
+    RegCloseKey(regKey);
+
 }
 bool Settings::getRunOnStartup() { return runOnStartup; }
 
@@ -250,196 +353,131 @@ void Settings::setStartMinimised(bool minimised) {
 }
 bool Settings::getStartMinimised() { return startMinimised; }
 
-int Settings::getBumpsSetting() {
-    return (int)(sqrt(bumpsFactor / BUMPSFORCE_MULTIPLIER));
+float Settings::getBumpsSetting() {
+    return sqrt(bumpsFactor / BUMPSFORCE_MULTIPLIER);
 }
 
-int Settings::getLoadSetting() {
-    return (int)(sqrt(loadFactor / LOADFORCE_MULTIPLIER));
+float Settings::getLoadSetting() {
+    return sqrt(loadFactor / LOADFORCE_MULTIPLIER);
 }
 
 int Settings::getMinForceSetting() {
     return minForce / MINFORCE_MULTIPLIER;
 }
 
-int Settings::getSopOffsetSetting() {
-    return (int)(sopOffset * 572.958f);
+float Settings::getSopOffsetSetting() {
+    return sopOffset * 572.958f;
 }
 
 void Settings::writeCarSpecificSetting() {
-
-    HKEY regKey;
-    DWORD sz = sizeof(DWORD);
-    DWORD specific = useCarSpecific;  
-
-    RegCreateKeyEx(
-        HKEY_CURRENT_USER, SETTINGS_KEY, 0, nullptr,
-        REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, nullptr, &regKey, nullptr
-    );
-
-    if (!RegOpenKeyEx(HKEY_CURRENT_USER, SETTINGS_KEY, 0, KEY_ALL_ACCESS, &regKey))
-        RegSetValueEx(regKey, L"useCarSpecific", 0, REG_DWORD, (BYTE *)&specific, sz);
-
+    
+    HKEY key = getSettingsRegKey();
+    if (key == NULL)
+        return;
+    setRegSetting(key, L"useCarSpecific", useCarSpecific);
+    RegCloseKey(key);
 }
 
 void Settings::readRegSettings(char *car) {
 
     wchar_t dguid[GUIDSTRING_MAX];
-    HKEY regKey;
-    DWORD val;
-    DWORD sz = sizeof(val);
     DWORD dgsz = sizeof(dguid);
+    HKEY key = getSettingsRegKey();
 
-    if (!RegOpenKeyEx(HKEY_CURRENT_USER, SETTINGS_KEY, 0, KEY_ALL_ACCESS, &regKey)) {
-
-        if (!RegGetValue(regKey, nullptr, L"device", RRF_RT_REG_SZ, nullptr, dguid, &dgsz))
-            if (FAILED(IIDFromString(dguid, &devGuid)))
-                devGuid = GUID_NULL;
-        if (RegGetValue(regKey, nullptr, L"reduceWhenParked", RRF_RT_REG_DWORD, nullptr, &val, &sz))
-            setReduceWhenParked(true);
-        else
-            setReduceWhenParked(val > 0);
-        if (RegGetValue(regKey, nullptr, L"runOnStartup", RRF_RT_REG_DWORD, nullptr, &val, &sz))
-            setRunOnStartup(false);
-        else
-            setRunOnStartup(val > 0);
-        if (RegGetValue(regKey, nullptr, L"startMinimised", RRF_RT_REG_DWORD, nullptr, &val, &sz))
-            setStartMinimised(false);
-        else
-            setStartMinimised(val > 0);
-        if (RegGetValue(regKey, nullptr, L"useCarSpecific", RRF_RT_REG_DWORD, nullptr, &val, &sz))
-            setUseCarSpecific(false, car);
-        else
-            setUseCarSpecific(val > 0, car);
-
-    }
-    else {
+    if (key == NULL) {
         setReduceWhenParked(true);
         setStartMinimised(false);
         setRunOnStartup(false);
         setUseCarSpecific(false, car);
+        return;
     }
 
+        
+    if (!RegGetValue(key, nullptr, L"device", RRF_RT_REG_SZ, nullptr, dguid, &dgsz))
+        if (FAILED(IIDFromString(dguid, &devGuid)))
+            devGuid = GUID_NULL;
+
+    setReduceWhenParked(getRegSetting(key, L"reduceWhenParked", true));
+    setRunOnStartup(getRegSetting(key, L"runOnStartup", false));
+    setStartMinimised(getRegSetting(key, L"startMinimised", false));
+    setUseCarSpecific(getRegSetting(key, L"useCarSpecific", false), car);
+
+    RegCloseKey(key);
+    
 }
 
 void Settings::readGenericSettings() {
 
     wchar_t dguid[GUIDSTRING_MAX];
-    HKEY regKey;
-    DWORD val;
-    DWORD sz = sizeof(val);
     DWORD dgsz = sizeof(dguid);
+    HKEY key = getSettingsRegKey();
 
-    if (!RegOpenKeyEx(HKEY_CURRENT_USER, SETTINGS_KEY, 0, KEY_ALL_ACCESS, &regKey)) {
-
-        if (RegGetValue(regKey, nullptr, L"ffb", RRF_RT_REG_DWORD, nullptr, &val, &sz))
-            setFfbType(FFBTYPE_DIRECT_FILTER);
-        else
-            setFfbType(val);
-        if (RegGetValue(regKey, nullptr, L"maxForce", RRF_RT_REG_DWORD, nullptr, &val, &sz))
-            setMaxForce(45);
-        else
-            setMaxForce(val);
-        if (RegGetValue(regKey, nullptr, L"minForce", RRF_RT_REG_DWORD, nullptr, &val, &sz))
-            setMinForce(0);
-        else
-            setMinForce(val);
-        if (RegGetValue(regKey, nullptr, L"bumpsFactor", RRF_RT_REG_DWORD, nullptr, &val, &sz))
-            setBumpsFactor(0);
-        else
-            setBumpsFactor(val);
-        if (RegGetValue(regKey, nullptr, L"loadFactor", RRF_RT_REG_DWORD, nullptr, &val, &sz))
-            setLoadFactor(0);
-        else
-            setLoadFactor(val);
-        if (RegGetValue(regKey, nullptr, L"longLoadFactor", RRF_RT_REG_DWORD, nullptr, &val, &sz))
-            setLongLoadFactor(1);
-        else
-            setLongLoadFactor(val);
-        if (RegGetValue(regKey, nullptr, L"yawFactor", RRF_RT_REG_DWORD, nullptr, &val, &sz))
-            setSopFactor(0);
-        else
-            setSopFactor(val);
-        if (RegGetValue(regKey, nullptr, L"yawOffset", RRF_RT_REG_DWORD, nullptr, &val, &sz))
-            setSopOffset(0);
-        else
-            setSopOffset(val);
-        if (RegGetValue(regKey, nullptr, L"use360ForDirect", RRF_RT_REG_DWORD, nullptr, &val, &sz))
-            setUse360ForDirect(true);
-        else
-            setUse360ForDirect(val > 0);       
-
-    }
-    else {
+    if (key == NULL) {
         setFfbType(FFBTYPE_DIRECT_FILTER);
-        setMinForce(0);
-        setMaxForce(45);
-        setBumpsFactor(0);
-        setLoadFactor(0);
-        setLongLoadFactor(1);
-        setSopFactor(0);
+        setMinForce(0, (HWND)-1);
+        setMaxForce(45, (HWND)-1);
+        setBumpsFactor(0, (HWND)-1);
+        setLoadFactor(0, (HWND)-1);
+        setLongLoadFactor(1, (HWND)-1);
+        setSopFactor(0, (HWND)-1);
         setUse360ForDirect(true);
+        return;
     }
+
+    setFfbType(getRegSetting(key, L"ffb", FFBTYPE_DIRECT_FILTER));
+    setMaxForce(getRegSetting(key, L"maxForce", 45), (HWND)-1);
+    setMinForce(getRegSetting(key, L"minForce", 0), (HWND)-1);
+    setBumpsFactor(getRegSetting(key, L"bumpsFactor", 0.0f), (HWND)-1);
+    setLoadFactor(getRegSetting(key, L"loadFactor", 0.0f), (HWND)-1);
+    setLongLoadFactor(getRegSetting(key, L"longLoadFactor", 1), (HWND)-1);
+    setSopFactor(getRegSetting(key, L"yawFactor", 0.0f), (HWND)-1);
+    setSopOffset(getRegSetting(key, L"yawOffset", 0.0f), (HWND)-1);
+    setUse360ForDirect(getRegSetting(key, L"use360ForDirect", true));
+
+    RegCloseKey(key);
 
 }
 
 void Settings::writeRegSettings() {
 
     wchar_t *guid;
-    HKEY regKey;
-    DWORD sz = sizeof(int);
-    DWORD reduceParked = getReduceWhenParked();
-    DWORD runOnStartup = getRunOnStartup();
-    DWORD startMinimised = getStartMinimised();
+    int len;
+    HKEY key = getSettingsRegKey();
 
-    RegCreateKeyEx(
-        HKEY_CURRENT_USER, SETTINGS_KEY, 0, nullptr,
-        REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, nullptr, &regKey, nullptr
-    );
+    if (key == NULL)
+        return;
 
-    if (!RegOpenKeyEx(HKEY_CURRENT_USER, SETTINGS_KEY, 0, KEY_ALL_ACCESS, &regKey)) {
-
-        if (SUCCEEDED(StringFromCLSID(devGuid, (LPOLESTR *)&guid))) {
-            int len = (lstrlenW(guid) + 1) * sizeof(wchar_t);
-            RegSetValueEx(regKey, L"device", 0, REG_SZ, (BYTE *)guid, len);
-        }
-        RegSetValueEx(regKey, L"reduceWhenParked", 0, REG_DWORD, (BYTE *)&reduceParked, sz);
-        RegSetValueEx(regKey, L"runOnStartup", 0, REG_DWORD, (BYTE *)&runOnStartup, sz);
-        RegSetValueEx(regKey, L"startMinimised", 0, REG_DWORD, (BYTE *)&startMinimised, sz);
-
+    if (SUCCEEDED(StringFromCLSID(devGuid, (LPOLESTR *)&guid))) {
+        len = (lstrlenW(guid) + 1) * sizeof(wchar_t);
+        RegSetValueEx(key, L"device", 0, REG_SZ, (BYTE *)guid, len);
     }
+    
+    setRegSetting(key, L"reduceWhenParked", getReduceWhenParked());
+    setRegSetting(key, L"runOnStartup", getRunOnStartup());
+    setRegSetting(key, L"startMinimised", getStartMinimised());
+
+    RegCloseKey(key);
 
 }
 
 void Settings::writeGenericSettings() {
 
-    HKEY regKey;
-    DWORD sz = sizeof(int);
-    DWORD bumps = getBumpsSetting();
-    DWORD load = getLoadSetting();
-    DWORD min = getMinForceSetting();
-    DWORD use360 = getUse360ForDirect();
-    DWORD sopOff = getSopOffsetSetting();
-    DWORD sop = (DWORD)sopFactor;
+    HKEY key = getSettingsRegKey();
 
-    RegCreateKeyEx(
-        HKEY_CURRENT_USER, SETTINGS_KEY, 0, nullptr,
-        REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, nullptr, &regKey, nullptr
-    );
+    if (key == NULL)
+        return;
 
-    if (!RegOpenKeyEx(HKEY_CURRENT_USER, SETTINGS_KEY, 0, KEY_ALL_ACCESS, &regKey)) {
+    setRegSetting(key, L"ffb", ffbType);
+    setRegSetting(key, L"bumpsFactor", getBumpsSetting());
+    setRegSetting(key, L"loadFactor", getLoadSetting());
+    setRegSetting(key, L"longLoadFactor", longLoadFactor);
+    setRegSetting(key, L"yawFactor", sopFactor);
+    setRegSetting(key, L"yawOffset", getSopOffsetSetting());
+    setRegSetting(key, L"maxForce", maxForce);
+    setRegSetting(key, L"minForce", getMinForceSetting());
+    setRegSetting(key, L"use360ForDirect", use360ForDirect);
 
-        RegSetValueEx(regKey, L"ffb", 0, REG_DWORD, (BYTE *)&ffbType, sz);
-        RegSetValueEx(regKey, L"bumpsFactor", 0, REG_DWORD, (BYTE *)&bumps, sz);
-        RegSetValueEx(regKey, L"loadFactor", 0, REG_DWORD, (BYTE *)&load, sz);
-        RegSetValueEx(regKey, L"longLoadFactor", 0, REG_DWORD, (BYTE *)&longLoadFactor, sz);
-        RegSetValueEx(regKey, L"yawFactor", 0, REG_DWORD, (BYTE *)&sop, sz);
-        RegSetValueEx(regKey, L"yawOffset", 0, REG_DWORD, (BYTE *)&sopOff, sz);
-        RegSetValueEx(regKey, L"maxForce", 0, REG_DWORD, (BYTE *)&maxForce, sz);
-        RegSetValueEx(regKey, L"minForce", 0, REG_DWORD, (BYTE *)&min, sz);
-        RegSetValueEx(regKey, L"use360ForDirect", 0, REG_DWORD, (BYTE *)&use360, sz);
-       
-    }
+    RegCloseKey(key);
 
 }
 
@@ -456,7 +494,8 @@ void Settings::readSettingsForCar(char *car) {
     std::string line;
 
     char carName[MAX_CAR_NAME];
-    int type = 2, min = 0, max = 45, bumps = 0, load = 0, longLoad = 1, yaw = 0, yawOffset = 0, use360 = 1;
+    int type = 2, min = 0, max = 45, longLoad = 1, use360 = 1;
+    float  bumps = 0.0f, load = 0.0f, yaw = 0.0f, yawOffset = 0.0f;
 
     memset(carName, 0, sizeof(carName));
 
@@ -479,12 +518,12 @@ void Settings::readSettingsForCar(char *car) {
     text(L"Loading settings for car %s", car);
 
     setFfbType(type);
-    setMinForce(min);
-    setMaxForce(max);
-    setBumpsFactor(bumps);
-    setLoadFactor(load);
-    setLongLoadFactor(longLoad);
-    setSopFactor(yaw);
+    setMinForce(min, (HWND)-1);
+    setMaxForce(max, (HWND)-1);
+    setBumpsFactor(bumps, (HWND)-1);
+    setLoadFactor(load, (HWND)-1);
+    setLongLoadFactor(longLoad, (HWND)-1);
+    setSopFactor(yaw, (HWND)-1);
     setUse360ForDirect(use360 > 0);
 
 DONE:
@@ -511,7 +550,8 @@ void Settings::writeSettingsForCar(char *car) {
     std::string line;
 
     char carName[MAX_CAR_NAME], buf[256];
-    int type = 2, min = 0, max = 45, bumps = 0, load = 0, longLoad = 1, yaw = 0, yawOffset = 0, use360 = 1;
+    int type = 2, min = 0, max = 45, longLoad = 1, use360 = 1;
+    float bumps = 0.0f, load = 0.0f, yaw = 0.0f, yawOffset = 0.0f;
     bool written = false, iniPresent = iniFile.good();
 
     text(L"Writing settings for car %s", car);
@@ -542,7 +582,7 @@ void Settings::writeSettingsForCar(char *car) {
             buf, INI_PRINT_FORMAT,
             car, ffbType, getMinForceSetting(), maxForce, getBumpsSetting(),
             getLoadSetting(), longLoadFactor, use360ForDirect,
-            (int)sopFactor, getSopOffsetSetting()
+            sopFactor, getSopOffsetSetting()
         );
         writeWithNewline(tmpFile, buf);
         written = true;
@@ -577,7 +617,7 @@ void Settings::writeSettingsForCar(char *car) {
     sprintf_s(
         buf, INI_PRINT_FORMAT,
         car, ffbType, getMinForceSetting(), maxForce, getBumpsSetting(),
-        getLoadSetting(), longLoadFactor, use360ForDirect, (int)sopFactor, getSopOffsetSetting()
+        getLoadSetting(), longLoadFactor, use360ForDirect, sopFactor, getSopOffsetSetting()
     );
     writeWithNewline(tmpFile, buf);
 

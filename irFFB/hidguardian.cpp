@@ -14,7 +14,7 @@ HidGuardian::HidGuardian(DWORD pid) {
     instance = this;
     readSettings();
     refreshStatus();
-    if (enabled && status == STATUS_ENABLED) {
+    if (enabled && hgStatus == STATUS_ENABLED) {
         if (queryService() == SERVICE_STOPPED)
             startService();
         Sleep(500);
@@ -153,7 +153,7 @@ void HidGuardian::install() {
         return;
     }
 
-    if (status != STATUS_NOTINSTALLED) {
+    if (hgStatus != STATUS_NOTINSTALLED) {
         text(L"HG: already installed");
         goto installSvc;
     }
@@ -208,7 +208,7 @@ installSvc:
             goto del;
         }
     
-    setStatus(status);
+    setStatus(hgStatus);
 
 del:
     if (infPath != nullptr)
@@ -219,7 +219,7 @@ cleanup:
 }
 
 bool HidGuardian::isEnabled() {
-    return status == STATUS_ENABLED;
+    return hgStatus == STATUS_ENABLED;
 }
 
 void HidGuardian::setDevice(WORD vid, WORD pid) {
@@ -229,7 +229,7 @@ void HidGuardian::setDevice(WORD vid, WORD pid) {
     currentVid = vid;
     currentPid = pid;
 
-    if (status != STATUS_ENABLED)
+    if (hgStatus != STATUS_ENABLED)
         return;
 
     msg.cmd = HG_CMD_DEVICE_ADD;
@@ -246,15 +246,17 @@ void HidGuardian::removeDevice(WORD vid, WORD pid, bool warn) {
 
     pipeMsg msg;
 
-    if (status != STATUS_ENABLED)
+    if (hgStatus != STATUS_ENABLED)
         return;
 
     msg.cmd = HG_CMD_DEVICE_DEL;
     StringCchPrintf(msg.id.hwid, 32, HG_HWID_FMT, vid, pid);
-    if (sendSvcMsg(&msg) && warn)
-        text(L"HG: *** Dev unmasked - unplug/replug or reboot ***");
-    else
+    if (sendSvcMsg(&msg) == HG_SVC_RET_ERROR) {
         text(L"HG: Failed to remove device");
+        return;
+    }
+    if (warn)
+        text(L"HG: *** Dev unmasked - unplug/replug or reboot ***");
 
 }
 
@@ -262,12 +264,12 @@ void HidGuardian::whitelist(DWORD pid) {
 
     pipeMsg msg;
 
-    if (status != STATUS_ENABLED)
+    if (hgStatus != STATUS_ENABLED)
         return;
 
     msg.cmd = HG_CMD_WHITELIST_ADD;
     msg.id.pid = pid;
-    if (!sendSvcMsg(&msg))
+    if (sendSvcMsg(&msg) == HG_SVC_RET_ERROR)
         text(L"HG: Failed to add to whitelist");
 
 }
@@ -288,7 +290,7 @@ void HidGuardian::stop(DWORD pid) {
 }
 
 int HidGuardian::getStatus() {
-    return status;
+    return hgStatus;
 }
 
 void HidGuardian::setStatus(int s) {
@@ -299,22 +301,25 @@ void HidGuardian::setStatus(int s) {
         return;
 
     if (s == STATUS_ENABLED && queryService() == SERVICE_STOPPED) {
-        status = s;
-        startService();
-        whitelist(GetCurrentProcessId());
-        if (currentVid != 0)
-            setDevice(currentVid, currentPid);
+        hgStatus = s;
+        if (startService()) {
+            whitelist(GetCurrentProcessId());
+            if (currentVid != 0)
+                setDevice(currentVid, currentPid);
+        }
+        else
+            text(L"HG: Service failed to start");
     }
     else if (s == STATUS_DISABLED && queryService() == SERVICE_RUNNING) {
         unWhitelist(GetCurrentProcessId());
         if (currentVid != 0)
             removeDevice(currentVid, currentPid, true);
         stopService();
-        status = s;
+        hgStatus = s;
     }
 
     
-    StringCchPrintfW(buf, 64, L"Status: %s", statuses[status]);
+    StringCchPrintfW(buf, 64, L"Status: %s", statuses[hgStatus]);
     SendMessage(statusWnd, WM_SETTEXT, NULL, (LPARAM)buf);
     SendMessage(enabledWnd, BM_SETCHECK, s == STATUS_ENABLED ? BST_CHECKED : BST_UNCHECKED, NULL);
     EnableWindow(svcWnd, s > STATUS_NOTINSTALLED);
@@ -328,12 +333,12 @@ int HidGuardian::refreshStatus() {
     ULONG s, problem;
     GUID classGuid = GUID_DEVCLASS_SYSTEM;
 
-    status = STATUS_NOTINSTALLED;
+    hgStatus = STATUS_NOTINSTALLED;
 
     HDEVINFO devInfo = SetupDiGetClassDevsW(&classGuid, NULL, NULL, DIGCF_PRESENT);
 
     if (devInfo == INVALID_HANDLE_VALUE)
-        return status;
+        return hgStatus;
 
     SP_DEVINFO_DATA devInfoData = { 0 };
     devInfoData.cbSize = sizeof(SP_DEVINFO_DATA);
@@ -369,16 +374,16 @@ int HidGuardian::refreshStatus() {
 
     if (s & DN_STARTED) {
         if (enabled)
-            status = STATUS_ENABLED;
+            hgStatus = STATUS_ENABLED;
         else
-            status = STATUS_DISABLED;
+            hgStatus = STATUS_DISABLED;
     }   
 
 release:
 
     SetupDiDestroyDeviceInfoList(devInfo);
-    setStatus(status);
-    return status;
+    setStatus(hgStatus);
+    return hgStatus;
 
 }
 
@@ -386,9 +391,9 @@ void HidGuardian::setEnabled(bool en) {
 
     enabled = en;
 
-    if (en && status == STATUS_DISABLED)
+    if (en && hgStatus == STATUS_DISABLED)
         setStatus(STATUS_ENABLED);
-    else if (!en && status == STATUS_ENABLED)
+    else if (!en && hgStatus == STATUS_ENABLED)
         setStatus(STATUS_DISABLED);
 
 }
@@ -1002,7 +1007,7 @@ bool HidGuardian::startService() {
                 ret = true;
                 break;
             }
-            Sleep(500);
+            Sleep(200);
         }
         Sleep(500);
     }
@@ -1070,6 +1075,8 @@ void HidGuardian::setSvcStatus(int status) {
     wchar_t buf[64];
     wchar_t *sTxt;
 
+    serviceStatus = status;
+
     switch (status) {
         case -1: sTxt = L"Not installed";               break;
         case SERVICE_STOP_PENDING: sTxt = L"Stopping";  break;
@@ -1084,16 +1091,19 @@ void HidGuardian::setSvcStatus(int status) {
 
 }
 
-bool HidGuardian::sendSvcMsg(pipeMsg *msg) {
+UINT HidGuardian::sendSvcMsg(pipeMsg *msg) {
 
     DWORD written, mode = PIPE_READMODE_MESSAGE;
-    bool ret = false;
+    UINT ret = HG_SVC_RET_ERROR;
     UINT resp;
     
     if (msg == nullptr) {
         text(L"HG: null service pipe msg");
-        return false;
+        return HG_SVC_RET_ERROR;
     }
+
+    if (serviceStatus != SERVICE_RUNNING)
+        return HG_SVC_RET_ERROR;
         
     DWORD size =
         (
@@ -1103,7 +1113,7 @@ bool HidGuardian::sendSvcMsg(pipeMsg *msg) {
            PIPE_MSG_SIZE_PID : PIPE_MSG_SIZE_HWID;
 
     HANDLE pipe =
-        CreateFile(
+        CreateFileW(
             HG_SVC_PIPE,
             GENERIC_READ|GENERIC_WRITE,
             0,
@@ -1115,7 +1125,7 @@ bool HidGuardian::sendSvcMsg(pipeMsg *msg) {
 
     if (pipe == INVALID_HANDLE_VALUE) {
         text(L"HG: Error opening service pipe: %d", GetLastError());
-        return false;
+        return HG_SVC_RET_ERROR;
     }
 
     if (!SetNamedPipeHandleState(pipe, &mode, NULL, NULL)) {
@@ -1125,6 +1135,25 @@ bool HidGuardian::sendSvcMsg(pipeMsg *msg) {
 
     if (!WriteFile(pipe, msg, size, &written, NULL)) {
         text(L"HG: Error writing to service pipe");
+        goto closePipe;
+    }
+
+    for (int i = 0; i < 10; i++) {
+
+        if (!PeekNamedPipe(pipe, NULL, 0, NULL, &written, NULL)) {
+            text(L"HG: Error peeking service pipe");
+            goto closePipe;
+        }
+
+        if (written >= sizeof(resp))
+            break;
+
+        Sleep(50);
+        
+    }
+
+    if (written < sizeof(resp)) {
+        text(L"HG: Timed out reading from service pipe");
         goto closePipe;
     }
 
@@ -1192,34 +1221,27 @@ void HidGuardian::elevate() {
 
 void HidGuardian::readSettings() {
 
-    HKEY regKey;
-    DWORD val;
-    DWORD sz = sizeof(val);
+    HKEY key = Settings::getSettingsRegKey();
 
-    if (!RegOpenKeyEx(HKEY_CURRENT_USER, SETTINGS_KEY, 0, KEY_ALL_ACCESS, &regKey)) {
-        if (RegGetValueW(regKey, nullptr, L"hgEnabled", RRF_RT_REG_DWORD, nullptr, &val, &sz))
-            enabled = true;
-        else
-            enabled = val > 0;
-    }
-    else
+    if (key == NULL) {
         enabled = true;
+        return;
+    }
+
+    enabled = Settings::getRegSetting(key, L"hgEnabled", true);
+    RegCloseKey(key);
 
 }
 
 void HidGuardian::writeSettings() {
 
-    HKEY regKey;
-    DWORD sz = sizeof(int);
-    DWORD en = enabled ? 1 : 0;
+    HKEY key = Settings::getSettingsRegKey();
 
-    RegCreateKeyExW(
-        HKEY_CURRENT_USER, SETTINGS_KEY, 0, nullptr,
-        REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, nullptr, &regKey, nullptr
-    );
+    if (key == NULL)
+        return;
 
-    if (!RegOpenKeyExW(HKEY_CURRENT_USER, SETTINGS_KEY, 0, KEY_ALL_ACCESS, &regKey))
-        RegSetValueEx(regKey, L"hgEnabled", 0, REG_DWORD, (BYTE *)&en, sz);
+    Settings::setRegSetting(key, L"hgEnabled", enabled);
+    RegCloseKey(key);
 
 }
 
@@ -1349,8 +1371,10 @@ void WINAPI HidGuardian::SvcMain(DWORD argc, LPTSTR argv) {
 
     svcStatusHandle = RegisterServiceCtrlHandlerW(SVCNAME, svcCtrlHandler);
 
-    if (svcStatusHandle == INVALID_HANDLE_VALUE)
+    if (svcStatusHandle == INVALID_HANDLE_VALUE) {
         svcReportError(L"Failed to register ctrl handler");
+        return;
+    }
 
     svcStatus.dwServiceType = SERVICE_WIN32_OWN_PROCESS;
     svcStatus.dwServiceSpecificExitCode = 0;

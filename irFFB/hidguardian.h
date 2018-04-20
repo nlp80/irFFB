@@ -2,14 +2,7 @@
 
 #include "stdafx.h"
 #include "irFFB.h"
-
-#include <winhttp.h>
-#include <cfgmgr32.h>
-#include <comdef.h>
-#include <RegStr.h>
-#include <newdev.h>
-#include <devguid.h>
-#include <sddl.h>
+#include "Settings.h"
 
 #define STATUS_NOTINSTALLED 0
 #define STATUS_DISABLED 1
@@ -109,7 +102,7 @@ private:
     bool startService(void);
     void stopService(void);
     void setSvcStatus(int);
-    bool sendSvcMsg(pipeMsg *);
+    UINT sendSvcMsg(pipeMsg *);
     bool isElevated(void);
     void elevate(void);
     void readSettings(void);
@@ -138,7 +131,8 @@ private:
     wchar_t *windowClass = L"HidGuardian";
     wchar_t *zipPath = nullptr;
     wchar_t *fldPath = nullptr;
-    int status = STATUS_NOTINSTALLED;
+    int hgStatus = STATUS_NOTINSTALLED;
+    int serviceStatus = SERVICE_STOPPED;
     bool classIsRegistered = false;
     bool enabled = true;
     WORD currentVid = 0, currentPid = 0;

@@ -98,68 +98,83 @@ void Fan::createWindow(HINSTANCE hInst) {
 
 LRESULT CALLBACK Fan::wndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
 
+    HWND wnd = (HWND)lParam;
+
     switch (message) {
 
-    case WM_COMMAND: {
-        int wmId = LOWORD(wParam);
-        switch (wmId) {
-        case IDM_EXIT:
-            DestroyWindow(hWnd);
-            break;
-        default:
-            if (HIWORD(wParam) == CBN_SELCHANGE) {
-                if ((HWND)lParam == instance->portWnd) {
-                    int idx = (int)SendMessage((HWND)lParam, CB_GETCURSEL, 0, 0);
-                    if (idx >= 0 && idx < instance->numPorts) {
-                        instance->fanPort = instance->ports[idx].dev;
-                        instance->initFanPort();
+        case WM_COMMAND: {
+            int wmId = LOWORD(wParam);
+            switch (wmId) {
+                case IDM_EXIT:
+                    DestroyWindow(hWnd);
+                    break;
+                default:
+                    if (HIWORD(wParam) == CBN_SELCHANGE) {
+                        if (wnd == instance->portWnd) {
+                            int idx = (int)SendMessage(wnd, CB_GETCURSEL, 0, 0);
+                            if (idx >= 0 && idx < instance->numPorts) {
+                                instance->fanPort = instance->ports[idx].dev;
+                                instance->initFanPort();
+                            }
+                        }
+                        else if (wnd == instance->speedUnitsWnd) {
+                            instance->setSpeedUnits(SendMessage(wnd, CB_GETCURSEL, 0, 0));
+                        }
                     }
-                }
-                else if ((HWND)lParam == instance->speedUnitsWnd) {
-                    instance->setSpeedUnits(SendMessage((HWND)lParam, CB_GETCURSEL, 0, 0));
-                }
+                    else if (HIWORD(wParam) == BN_CLICKED) {
+                        bool oldValue = SendMessage(wnd, BM_GETCHECK, 0, 0) == BST_CHECKED;
+                        if (wnd == instance->windSimFormatWnd)
+                            instance->setWindSimFormat(!oldValue);
+                    }
+                    break;
             }
-            else if (HIWORD(wParam) == BN_CLICKED) {
-                bool oldValue = SendMessage((HWND)lParam, BM_GETCHECK, 0, 0) == BST_CHECKED;
-                if ((HWND)lParam == instance->windSimFormatWnd)
-                    instance->setWindSimFormat(!oldValue);
-            }
-            break;
         }
-    }
-    break;
+        break;
 
-    case WM_HSCROLL: {
-        if ((HWND)lParam == instance->manualWnd->trackbar)
-            instance->setManualSpeed(SendMessage((HWND)lParam, TBM_GETPOS, 0, 0));
-    }
-    break;
+        case WM_HSCROLL: {
+            if (wnd == instance->manualWnd->trackbar) {
+                wchar_t strbuf[8];
+                int spd = SendMessage(wnd, TBM_GETPOS, 0, 0);
+                swprintf_s(strbuf, L"%d", spd);
+                instance->setManualSpeed(spd);
+                SendMessage(instance->manualWnd->value, WM_SETTEXT, NULL, LPARAM(strbuf));
+            }
+        }
+        break;
 
-    case WM_CTLCOLORSTATIC: {
-        SetBkColor((HDC)wParam, RGB(0xff, 0xff, 0xff));
-        return (LRESULT)CreateSolidBrush(RGB(0xff, 0xff, 0xff));
-    }
-    break;
+        case WM_EDIT_VALUE: {
+            if (wnd == instance->manualWnd->value) {
+                instance->setManualSpeed(wParam);
+                SendMessage(instance->manualWnd->trackbar, TBM_SETPOS, true, wParam);
+            }
+        }
+        break;
 
-    case WM_PAINT: {
-        PAINTSTRUCT ps;
-        BeginPaint(hWnd, &ps);
-        EndPaint(hWnd, &ps);
-    }
-    break;
+        case WM_CTLCOLORSTATIC: {
+            SetBkColor((HDC)wParam, RGB(0xff, 0xff, 0xff));
+            return (LRESULT)CreateSolidBrush(RGB(0xff, 0xff, 0xff));
+        }
+        break;
 
-    case WM_DESTROY: {
-        wchar_t buf[16];
-        SendMessage(instance->maxSpeedWnd, WM_GETTEXT, 16, LPARAM(buf));
-        instance->setMaxSpeed(StrToInt(buf));
-        instance->writeSettings();
-    }
-    break;
+        case WM_PAINT: {
+            PAINTSTRUCT ps;
+            BeginPaint(hWnd, &ps);
+            EndPaint(hWnd, &ps);
+        }
+        break;
 
-    default:
-        return DefWindowProc(hWnd, message, wParam, lParam);
+        case WM_DESTROY: {
+            wchar_t buf[16];
+            SendMessage(instance->maxSpeedWnd, WM_GETTEXT, 16, LPARAM(buf));
+            instance->setMaxSpeed(StrToInt(buf));
+            instance->writeSettings();
+        }
+        break;
 
-    }
+        default:
+            return DefWindowProc(hWnd, message, wParam, lParam);
+
+        }
 
     return 0;
 

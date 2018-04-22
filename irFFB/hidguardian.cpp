@@ -1381,6 +1381,12 @@ void WINAPI HidGuardian::SvcMain(DWORD argc, LPTSTR argv) {
     svcReportStatus(SERVICE_START_PENDING, NO_ERROR, 0);
 
     svcStopEvent = CreateEventW(NULL, true, false, L"irFFBsvcStopEvent");
+    if (svcStopEvent == INVALID_HANDLE_VALUE) {
+        svcReportError(L"Failed to create service stop event");
+        svcReportStatus(SERVICE_STOPPED, SERVICE_ERROR_CRITICAL, 0);
+        return;
+    }
+
     if (!CreateThread(NULL, 0, pipeServerThread, NULL, 0, NULL)) {
         svcReportError(L"Failed to start pipe server thread");
         svcReportStatus(SERVICE_STOPPED, SERVICE_ERROR_CRITICAL, 0);

@@ -564,6 +564,7 @@ void JetSeat::readSettings() {
         setBumpsGain(80);
         setYawGain(80);
         setEnabled(true);
+        return;
     }
 
     setGearPlace(Settings::getRegSetting(key, L"jsGearPlace", BACK));

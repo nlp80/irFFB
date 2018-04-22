@@ -186,9 +186,8 @@ void Fan::setSpeedUnits(int u) {
         return;
     
     units = u;
-    wchar_t buf[16];
-    if (SendMessageW(instance->maxSpeedWnd, WM_GETTEXT, 16, LPARAM(buf)))
-        maxSpeed = StrToInt(buf);
+    if (SendMessageW(instance->maxSpeedWnd, WM_GETTEXT, 16, LPARAM(strbuf)))
+        maxSpeed = StrToInt(strbuf);
     setMaxSpeed(maxSpeed);
     SendMessage(speedUnitsWnd, CB_SETCURSEL, u, 0);
     
@@ -218,7 +217,7 @@ UPDATE:
 void Fan::setManualSpeed(int s) {
 
     SendMessage(manualWnd->trackbar, TBM_SETPOS, TRUE, s);
-    swprintf_s(strbuf, L"Manual fan speed  [ %d ]", s);
+    swprintf_s(strbuf, L"%d", s);
     SendMessage(manualWnd->value, WM_SETTEXT, NULL, LPARAM(strbuf));
     manualSpeed = (float)s;
     setSpeed(manualSpeed * maxSpeedMs / 100);

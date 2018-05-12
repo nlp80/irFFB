@@ -43,6 +43,8 @@ class Settings {
         HWND getRunOnStartupWnd();
         void setStartMinimisedWnd(HWND);
         HWND getStartMinimisedWnd();
+        void setDebugWnd(HWND);
+        HWND getDebugWnd();
         void clearFfbDevices();
         void addFfbDevice(GUID dev, const wchar_t *);
         void setFfbDevice(int);
@@ -75,6 +77,8 @@ class Settings {
         bool getRunOnStartup();
         void setStartMinimised(bool);
         bool getStartMinimised();
+        void setDebug(bool);
+        bool getDebug();
         float getBumpsSetting();
         float getLoadSetting();
         int getMinForceSetting();
@@ -86,18 +90,20 @@ class Settings {
         void writeGenericSettings();
         void readSettingsForCar(char *);
         void writeSettingsForCar(char *);
+        PWSTR getLogPath();
 
     private:
         HWND devWnd, ffbWnd;
         sWins_t *minWnd, *maxWnd, *bumpsWnd, *loadWnd, *longLoadWnd, *sopWnd, *sopOffsetWnd;
         HWND use360Wnd, carSpecificWnd, reduceWhenParkedWnd;
-        HWND runOnStartupWnd, startMinimisedWnd;
+        HWND runOnStartupWnd, startMinimisedWnd, debugWnd;
         int ffbType, ffdeviceIdx, minForce, maxForce, longLoadFactor;
         float scaleFactor, bumpsFactor, loadFactor, sopFactor, sopOffset;
-        bool use360ForDirect, useCarSpecific;
+        bool use360ForDirect, useCarSpecific, debug;
         bool reduceWhenParked, runOnStartup, startMinimised;
         GUID devGuid = GUID_NULL, ffdevices[MAX_FFB_DEVICES];
         wchar_t strbuf[64];
+        HANDLE debugHnd;
 
         wchar_t *ffbTypeString(int);
         PWSTR getIniPath();

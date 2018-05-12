@@ -38,6 +38,10 @@ WCHAR szTitle[MAX_LOADSTRING];
 WCHAR szWindowClass[MAX_LOADSTRING];
 NOTIFYICONDATA niData;
 
+HANDLE debugHnd = INVALID_HANDLE_VALUE;
+wchar_t debugLastMsg[512];
+LONG debugRepeat = 0;
+
 LPDIRECTINPUT8 pDI = nullptr;
 LPDIRECTINPUTDEVICE8 ffdevice = nullptr;
 LPDIRECTINPUTEFFECT effect = nullptr;
@@ -132,6 +136,7 @@ DWORD WINAPI readWheelThread(LPVOID lParam) {
 
         res = ffdevice->GetDeviceState(sizeof(joyState), &joyState);
         if (res != DI_OK) {
+            debug(L"GetDeviceState returned: 0x%x, requesting reacquire", res);
             reacquireNeeded = true;
             continue;
         }
@@ -335,6 +340,7 @@ DWORD WINAPI directFFBThread(LPVOID lParam) {
 }
 
 void resetForces() {
+    debug(L"Resetting forces");
     suspForce = 0;
     for (int i = 0; i < DIRECT_INTERP_SAMPLES; i++) {
         suspForceST[i] = 0;
@@ -419,13 +425,18 @@ void logiRpmLed(float *rpm, float redline) {
 }
 
 void deviceChange() {
+    debug(L"Device change notification");
     if (!onTrack) {
+        debug(L"Not on track, processing device change");
+        deviceChangePending = false;
         enumDirectInput();
         if (!settings.isFfbDevicePresent())
             releaseDirectInput();
     }
-    else
+    else {
+        debug(L"Deferring device change processing whilst on track");
         deviceChangePending = true;
+    }
 }
 
 DWORD getDeviceVidPid(LPDIRECTINPUTDEVICE8 dev) {
@@ -447,11 +458,13 @@ DWORD getDeviceVidPid(LPDIRECTINPUTDEVICE8 dev) {
 }
 
 void minimise() {
+    debug(L"Minimising window");
     Shell_NotifyIcon(NIM_ADD, &niData);
     ShowWindow(mainWnd, SW_HIDE);
 }
 
 void restore() {
+    debug(L"Restoring window");
     Shell_NotifyIcon(NIM_DELETE, &niData);
     ShowWindow(mainWnd, SW_SHOW);
 }
@@ -493,15 +506,15 @@ int APIENTRY wWinMain(
     float *speed = nullptr, *throttle = nullptr, *rpm = nullptr;
     float *LFshockDeflST = nullptr, *RFshockDeflST = nullptr, *CFshockDeflST = nullptr;
     float *LRshockDeflST = nullptr, *RRshockDeflST = nullptr;
-    float *vX = nullptr, *vY = nullptr;
+    float *vX = nullptr, *vY = nullptr, yaw;
     float LFshockDeflLast = -10000, RFshockDeflLast = -10000, CFshockDeflLast = -10000;
-    float LRshockDeflLast = -10000, RRshockDeflLast = -10000, FshockNom, yaw;
-    bool *isOnTrack = nullptr;
-    int *trackSurface = nullptr, *gear = nullptr;;
+    float LRshockDeflLast = -10000, RRshockDeflLast = -10000, FshockNom;
+    bool *isOnTrack = nullptr, *isInGarage = nullptr, *isOnTrackCar = nullptr;
+    int *trackSurface = nullptr, *gear = nullptr;
 
-    bool shockNomSet = false;
+    bool shockNomSet = false, inGarage = false, onTrackCar = false;
     int numHandles = 0, dataLen = 0, lastGear = 0;
-    int STnumSamples = 0, STmaxIdx = 0;
+    int STnumSamples = 0, STmaxIdx = 0, lastTrackSurface = -1;
     float halfSteerMax = 0, lastTorque = 0, lastSuspForce = 0, redline;
     float yawFilter[DIRECT_INTERP_SAMPLES];
 
@@ -586,6 +599,8 @@ int APIENTRY wWinMain(
         CreateThread(NULL, 0, directFFBThread, NULL, 0, NULL), THREAD_PRIORITY_HIGHEST
     );
 
+    debug(L"Init complete, entering mainloop");
+
     while (TRUE) {
 
         DWORD res;
@@ -595,6 +610,8 @@ int APIENTRY wWinMain(
             irsdk_startup() && (hdr = irsdk_getHeader()) &&
             hdr->status & irsdk_stConnected && hdr->bufLen != dataLen && hdr->bufLen != 0
         ) {
+
+            debug(L"New iRacing session");
 
             handles[0] = hDataValidEvent;
             numHandles = 1;
@@ -615,6 +632,8 @@ int APIENTRY wWinMain(
     
             redline = getCarRedline();
 
+            debug(L"Redline is %f", redline);
+            debug(L"Informing iRacing that maxForce is %d", settings.getMaxForce());
             // Inform iRacing of the maxForce setting
             irsdk_broadcastMsg(irsdk_BroadcastFFBCommand, irsdk_FFBCommand_MaxForce, (float)settings.getMaxForce());
 
@@ -627,6 +646,9 @@ int APIENTRY wWinMain(
             rpm = floatvarptr(data, "RPM");
             gear = intvarptr(data, "Gear");
             isOnTrack = boolvarptr(data, "IsOnTrack");
+            isOnTrackCar = boolvarptr(data, "IsOnTrackCar");
+            isInGarage = boolvarptr(data, "IsInGarage");
+
             trackSurface = intvarptr(data, "PlayerTrackSurface");
             vX = floatvarptr(data, "VelocityX");
             vY = floatvarptr(data, "VelocityY");
@@ -651,6 +673,7 @@ int APIENTRY wWinMain(
 
         // Try to make sure we've retained our acquisition
         if (ffdevice && reacquireNeeded) {
+            debug(L"Reacquiring DI device");
             reacquireDIDevice();
             reacquireNeeded = false;
         }
@@ -662,6 +685,7 @@ int APIENTRY wWinMain(
         if (numHandles > 0 && res == numHandles - 1 && irsdk_getNewData(data)) {
 
             if (onTrack && !*isOnTrack) {
+                debug(L"No longer on track");
                 onTrack = false;
                 setOnTrackStatus(onTrack);
                 lastTorque = lastSuspForce = 0.0f;
@@ -671,6 +695,7 @@ int APIENTRY wWinMain(
             }
 
             else if (!onTrack && *isOnTrack) {
+                debug(L"Now on track, FshockNom is %f", FshockNom);
                 onTrack = true;
                 setOnTrackStatus(onTrack);
                 RFshockDeflLast = LFshockDeflLast = 
@@ -678,6 +703,21 @@ int APIENTRY wWinMain(
                         CFshockDeflLast = -10000.0f;
                 clippedSamples = samples = lastGear = 0;
                 memset(yawFilter, 0, DIRECT_INTERP_SAMPLES * sizeof(float));
+            }
+
+            if (*trackSurface != lastTrackSurface) {
+                debug(L"Track surface is now: %d, FshockNom is %f", *trackSurface, FshockNom);
+                lastTrackSurface = *trackSurface;
+            }
+
+            if (inGarage != *isInGarage) {
+                debug(L"IsInGarage is now %d, FshockNom is %f", *isInGarage, FshockNom);
+                inGarage = *isInGarage;
+            }
+
+            if (onTrackCar != *isOnTrackCar) {
+                debug(L"IsOnTrackCar is now %d, FshockNom is %f", *isOnTrackCar, FshockNom);
+                onTrackCar = *isOnTrackCar;
             }
 
             if (jetseat && jetseat->isEnabled()) {
@@ -692,9 +732,9 @@ int APIENTRY wWinMain(
             if (ffdevice && logiWheel)
                 logiRpmLed(rpm, redline);
 
-            yaw = 0;
+            yaw = 0.0f;
 
-            if (*speed > 1.0f) {
+            if (*speed > 2.0f) {
             
                 float bumpsFactor = settings.getBumpsFactor();
                 float loadFactor = settings.getLoadFactor();
@@ -705,7 +745,7 @@ int APIENTRY wWinMain(
                 bool use360  = settings.getUse360ForDirect();
                 int ffbType = settings.getFfbType();
 
-                if (*speed > 4.0f) {
+                if (*speed > 5.0f) {
 
                     float halfMaxForce = (float)(settings.getMaxForce() >> 1);
                     float r = *vY / *vX;
@@ -716,6 +756,7 @@ int APIENTRY wWinMain(
 
                     if (ar > 1.0f) {
                         sa = csignf(0.785f, r);
+                        asa = 0.785f;
                         yaw = minf(maxf(sa * sopFactor, -halfMaxForce), halfMaxForce);
                     }
                     else {
@@ -723,11 +764,17 @@ int APIENTRY wWinMain(
                         asa = abs(sa);
                         if (asa > sopOffset) {
                             sa -= csignf(sopOffset, sa);
-                            sa *= 2.0f - asa;
-                            yaw = minf(maxf(sa * sopFactor, -halfMaxForce), halfMaxForce);
+                            yaw =
+                                minf(
+                                    maxf(
+                                        sa * (2.0f - asa) * sopFactor,
+                                        -halfMaxForce
+                                    ),
+                                    halfMaxForce
+                                );
                         }
                     }
-
+                    
                     if (jetseat && jetseat->isEnabled() && asa > sopOffset)
                         jetseat->yawEffect(sa);
 
@@ -979,6 +1026,8 @@ int APIENTRY wWinMain(
                 }
 
                 stopped = false;
+                if (!shockNomSet)
+                    debug(L"We're moving, FshockNom set to: %f", FshockNom);
                 shockNomSet = true;
 
             }
@@ -991,19 +1040,22 @@ int APIENTRY wWinMain(
                     FshockNom = LFshockDeflST[STmaxIdx] + RFshockDeflST[STmaxIdx];
             }
 
-            for (int i = 0; i < DIRECT_INTERP_SAMPLES; i++) {
-                yawFilter[i] = yaw * firc6[i];
-                yawForce[i] =
-                    yawFilter[0] + yawFilter[1] + yawFilter[2] +
-                        yawFilter[3] + yawFilter[4] + yawFilter[5];
-            }
-
             if (*isOnTrack)
                 fan->setSpeed(*speed);
 
             if (jetseat && jetseat->isEnabled() && *gear != lastGear) {
                 jetseat->gearEffect();
                 lastGear = *gear;
+            }
+
+            for (int i = 0; i < DIRECT_INTERP_SAMPLES; i++) {
+
+                yawFilter[i] = yaw * firc6[i];
+
+                yawForce[i] =
+                    yawFilter[0] + yawFilter[1] + yawFilter[2] +
+                        yawFilter[3] + yawFilter[4] + yawFilter[5];
+
             }
 
             if (
@@ -1109,6 +1161,7 @@ int APIENTRY wWinMain(
 
         // Did we lose iRacing?
         if (numHandles > 0 && !(hdr->status & irsdk_stConnected)) {
+            debug(L"Disconnected from iRacing");
             numHandles = 0;
             dataLen = 0;
             if (data != NULL) {
@@ -1341,20 +1394,23 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow) {
         checkbox(
             mainWnd, 
             L" Use 360 Hz telemetry for suspension effects\r\n in direct modes?",
-            460, 380
+            460, 340
         )
     );
     settings.setCarSpecificWnd(
-        checkbox(mainWnd, L" Use car specific settings?", 460, 440)
+        checkbox(mainWnd, L" Use car specific settings?", 460, 400)
     );
     settings.setReduceWhenParkedWnd(
-        checkbox(mainWnd, L" Reduce force when parked?", 460, 480)
+        checkbox(mainWnd, L" Reduce force when parked?", 460, 440)
     );
     settings.setRunOnStartupWnd(
-        checkbox(mainWnd, L" Run on startup?", 460, 520)
+        checkbox(mainWnd, L" Run on startup?", 460, 480)
     );
     settings.setStartMinimisedWnd(
-        checkbox(mainWnd, L" Start minimised?", 460, 560)
+        checkbox(mainWnd, L" Start minimised?", 460, 520)
+    );
+    settings.setDebugWnd(
+        checkbox(mainWnd, L"Debug logging?", 460, 560)
     );
 
     int statusParts[] = { 256, 424, 864 };
@@ -1442,6 +1498,21 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                             settings.setRunOnStartup(!oldValue);
                         else if (wnd == settings.getStartMinimisedWnd())
                             settings.setStartMinimised(!oldValue);
+                        else if (wnd == settings.getDebugWnd()) {
+                            settings.setDebug(!oldValue);
+                            if (settings.getDebug()) {
+                                debugHnd = CreateFileW(settings.getLogPath(), GENERIC_WRITE, FILE_SHARE_READ, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+                                int chars = SendMessageW(textWnd, WM_GETTEXTLENGTH, 0, 0);
+                                wchar_t *buf = new wchar_t[chars + 1];
+                                SendMessageW(textWnd, WM_GETTEXT, chars + 1, (LPARAM)buf);
+                                debug(buf);
+                                delete[] buf;
+                            }
+                            else if (debugHnd != INVALID_HANDLE_VALUE) {
+                                CloseHandle(debugHnd);
+                                debugHnd = INVALID_HANDLE_VALUE;
+                            }
+                        }
                     }
                     return DefWindowProc(hWnd, message, wParam, lParam);
             }
@@ -1508,9 +1579,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             int wmId = LOWORD(wParam);
             switch (wmId) {
                 case PBT_APMSUSPEND:
+                    debug(L"Computer is suspending, release all");
                     releaseAll();
                 break;
                 case PBT_APMRESUMESUSPEND:
+                    debug(L"Computer is resuming, init all");
                     initAll();
                 break;
             }
@@ -1565,6 +1638,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         break;
 
         case WM_DESTROY: {
+            debug(L"Exiting");
             Shell_NotifyIcon(NIM_DELETE, &niData);
             releaseAll();
             if (settings.getUseCarSpecific() && car[0] != 0)
@@ -1573,6 +1647,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 settings.writeGenericSettings();
             settings.writeRegSettings();
             hidGuardian->stop(GetCurrentProcessId());
+            if (debugHnd != INVALID_HANDLE_VALUE)
+                CloseHandle(debugHnd);
             exit(0);
         }
         break;
@@ -1620,6 +1696,8 @@ void text(wchar_t *fmt, ...) {
     SendMessage(textWnd, EM_REPLACESEL, 0, (LPARAM)msg);
     SendMessage(textWnd, EM_SCROLLCARET, 0, 0);
 
+    debug(msg);
+
 }
 
 void text(wchar_t *fmt, char *charstr) {
@@ -1629,6 +1707,35 @@ void text(wchar_t *fmt, char *charstr) {
     mbstowcs_s(nullptr, wstr, len, charstr, len);
     text(fmt, wstr);
     delete[] wstr;
+
+}
+
+void debug(wchar_t *fmt, ...) {
+
+    if (!settings.getDebug())
+        return;
+
+    DWORD written;
+    va_list argp;
+    wchar_t msg[512];
+    va_start(argp, fmt);
+
+    StringCbVPrintf(msg, sizeof(msg) - 4, fmt, argp);
+    va_end(argp);
+    StringCbCat(msg, sizeof(msg), L"\r\n");
+    if (!wcscmp(msg, debugLastMsg)) {
+        debugRepeat++;
+        return;
+    }
+    else if (debugRepeat) {
+        wchar_t rm[256];
+        StringCbPrintfW(rm, sizeof(rm), L"-- Last message repeated %d times --\r\n", debugRepeat);
+        WriteFile(debugHnd, rm, wcslen(rm) * sizeof(wchar_t), &written, NULL);
+        debugRepeat = 0;
+    }
+
+    StringCbCopy(debugLastMsg, sizeof(debugLastMsg), msg);
+    WriteFile(debugHnd, msg, wcslen(msg) * sizeof(wchar_t), &written, NULL);
 
 }
 
@@ -1664,8 +1771,10 @@ void setOnTrackStatus(bool onTrack) {
         LPARAM(onTrack ? L"On track" : L"Not on track")
     );
 
-    if (!onTrack && deviceChangePending)
+    if (!onTrack && deviceChangePending) {
+        debug(L"Processing deferred device change notification");
         deviceChange();
+    }
 
 }
 
@@ -1715,7 +1824,7 @@ void setLogiWheelRange(WORD prodId) {
             }
 
             if (
-                wcsstr(intfDetail->DevicePath, G25PATH) != NULL ||
+                wcsstr(intfDetail->DevicePath, G25PATH)  != NULL ||
                 wcsstr(intfDetail->DevicePath, DFGTPATH) != NULL ||
                 wcsstr(intfDetail->DevicePath, G27PATH) != NULL
             ) {
@@ -1789,6 +1898,7 @@ BOOL CALLBACK EnumFFDevicesCallback(LPCDIDEVICEINSTANCE diDevInst, VOID *wnd) {
         return true;
 
     settings.addFfbDevice(diDevInst->guidInstance, diDevInst->tszProductName);
+    debug(L"Adding DI device: %s", diDevInst->tszProductName);
 
     return true;
 
@@ -1814,7 +1924,7 @@ void enumDirectInput() {
                 (VOID **)&pDI, nullptr
             )
         )
-        ) {
+    ) {
         text(L"Failed to initialise DirectInput");
         return;
     }
@@ -1846,7 +1956,7 @@ void initDirectInput() {
                 (VOID **)&pDI, nullptr
             )
         )
-        ) {
+    ) {
         text(L"Failed to initialise DirectInput");
         return;
     }
@@ -1941,8 +2051,10 @@ void releaseDirectInput() {
 
 void reacquireDIDevice() {
 
-    if (ffdevice == nullptr)
+    if (ffdevice == nullptr) {
+        debug(L"!! ffdevice was null during reacquire !!");
         return;
+    }
 
     HRESULT hr;
 
@@ -2014,8 +2126,10 @@ inline void setFFB(int mag) {
 
     pforce.lOffset = mag;
     HRESULT hr = effect->SetParameters(&dieff, DIEP_TYPESPECIFICPARAMS | DIEP_NORESTART);
-	if (hr != DI_OK)
+    if (hr != DI_OK) {
+        debug(L"SetParameters returned 0x%x, requesting reacquire", hr);
         reacquireNeeded = true;
+    }
 
 }
 

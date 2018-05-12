@@ -38,6 +38,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define SETTINGS_KEY L"Software\\irFFB\\Settings"
 #define RUN_ON_STARTUP_KEY L"Software\\Microsoft\\Windows\\CurrentVersion\\Run"
 #define INI_PATH L"\\irFFB.ini"
+#define LOG_PATH L"\\irFFB.log"
 #define INI_SCAN_FORMAT  "%[^:]:%d:%d:%d:%f:%f:%d:%d:%f:%f"
 #define INI_PRINT_FORMAT "%s:%d:%d:%d:%0.1f:%0.1f:%d:%d:%0.1f:%0.1f\r"
 #define MAX_CAR_NAME 32
@@ -103,6 +104,7 @@ HWND checkbox(HWND, wchar_t *, int, int);
 bool initVJD();
 void text(wchar_t *, ...);
 void text(wchar_t *, char *);
+void debug(wchar_t *, ...);
 void setCarStatus(char *);
 void setConnectedStatus(bool);
 void setOnTrackStatus(bool);

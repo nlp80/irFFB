@@ -208,9 +208,8 @@ void Fan::setMaxSpeed(int s) {
         maxSpeedMs = (float)s / 3.6f;
 
 UPDATE:
-    wchar_t buf[16];
-    _itow_s(s, buf, 10);
-    SendMessage(maxSpeedWnd, WM_SETTEXT, 0, LPARAM(buf));
+    _itow_s(s, strbuf, 10);
+    SendMessage(maxSpeedWnd, WM_SETTEXT, 0, LPARAM(strbuf));
 
 }
 

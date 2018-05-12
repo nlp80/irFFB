@@ -129,6 +129,8 @@ void Settings::setRunOnStartupWnd(HWND wnd) { runOnStartupWnd = wnd; }
 HWND Settings::getRunOnStartupWnd() { return runOnStartupWnd; }
 void Settings::setStartMinimisedWnd(HWND wnd) { startMinimisedWnd = wnd; }
 HWND Settings::getStartMinimisedWnd() { return startMinimisedWnd; }
+void Settings::setDebugWnd(HWND wnd) { debugWnd = wnd; }
+HWND Settings::getDebugWnd() { return debugWnd; }
 
 void Settings::clearFfbDevices() {
     memset(ffdevices, 0, sizeof(ffdevices));
@@ -352,6 +354,17 @@ void Settings::setStartMinimised(bool minimised) {
     SendMessage(startMinimisedWnd, BM_SETCHECK, minimised ? BST_CHECKED : BST_UNCHECKED, NULL);
 }
 bool Settings::getStartMinimised() { return startMinimised; }
+
+void Settings::setDebug(bool enabled) {
+
+    SendMessage(debugWnd, BM_SETCHECK, enabled ? BST_CHECKED : BST_UNCHECKED, NULL);
+    debug = enabled;
+
+}
+
+bool Settings::getDebug() {
+    return debug;
+}
 
 float Settings::getBumpsSetting() {
     return sqrt(bumpsFactor / BUMPSFORCE_MULTIPLIER);
@@ -655,6 +668,24 @@ PWSTR Settings::getIniPath() {
 
     lstrcpyW(path, docsPath);
     lstrcatW(path, INI_PATH);
+    CoTaskMemFree(docsPath);
+
+    return path;
+
+}
+
+PWSTR Settings::getLogPath() {
+
+    PWSTR docsPath;
+    wchar_t *path;
+
+    if (SHGetKnownFolderPath(FOLDERID_Documents, 0, NULL, &docsPath) != S_OK)
+        return nullptr;
+
+    path = new wchar_t[lstrlen(docsPath) + lstrlen(LOG_PATH) + 1];
+
+    lstrcpyW(path, docsPath);
+    lstrcatW(path, LOG_PATH);
     CoTaskMemFree(docsPath);
 
     return path;

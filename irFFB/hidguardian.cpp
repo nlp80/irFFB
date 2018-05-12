@@ -1363,8 +1363,6 @@ size_t HidGuardian::multiSzLen(wchar_t *multiSz) {
 
 }
 
-
-
 // Service stuff
 
 void WINAPI HidGuardian::SvcMain(DWORD argc, LPTSTR argv) {

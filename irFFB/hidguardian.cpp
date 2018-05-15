@@ -1162,7 +1162,7 @@ UINT HidGuardian::sendSvcMsg(pipeMsg *msg) {
         goto closePipe;
     }
 
-    ret = resp != 0;
+    ret = resp;
 
 closePipe:
     CloseHandle(pipe);

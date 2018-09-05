@@ -706,12 +706,12 @@ int APIENTRY wWinMain(
             }
 
             if (*trackSurface != lastTrackSurface) {
-                debug(L"Track surface is now: %d", *trackSurface);
+                debug(L"Track surface is now: %d, FshockNom is %f", *trackSurface, FshockNom);
                 lastTrackSurface = *trackSurface;
             }
 
             if (inGarage != *isInGarage) {
-                debug(L"IsInGarage is now %d", *isInGarage);
+                debug(L"IsInGarage is now %d, FshockNom is %f", *isInGarage, FshockNom);
                 inGarage = *isInGarage;
             }
 
@@ -1028,14 +1028,8 @@ int APIENTRY wWinMain(
                 stopped = false;
 
             }
-            else {
+            else
                 stopped = true;
-                if (
-                    LFshockDeflST != nullptr && RFshockDeflST != nullptr &&
-                    abs(*speed) < 0.1f && *throttle == 0 && !shockNomSet
-                )
-                    FshockNom = LFshockDeflST[STmaxIdx] + RFshockDeflST[STmaxIdx];
-            }
 
             if (*isOnTrack)
                 fan->setSpeed(*speed);

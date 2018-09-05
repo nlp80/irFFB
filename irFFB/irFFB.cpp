@@ -695,7 +695,7 @@ int APIENTRY wWinMain(
             }
 
             else if (!onTrack && *isOnTrack) {
-                debug(L"Now on track, FshockNom is %f", FshockNom);
+                debug(L"Now on track");
                 onTrack = true;
                 setOnTrackStatus(onTrack);
                 RFshockDeflLast = LFshockDeflLast = 
@@ -706,17 +706,17 @@ int APIENTRY wWinMain(
             }
 
             if (*trackSurface != lastTrackSurface) {
-                debug(L"Track surface is now: %d, FshockNom is %f", *trackSurface, FshockNom);
+                debug(L"Track surface is now: %d", *trackSurface);
                 lastTrackSurface = *trackSurface;
             }
 
             if (inGarage != *isInGarage) {
-                debug(L"IsInGarage is now %d, FshockNom is %f", *isInGarage, FshockNom);
+                debug(L"IsInGarage is now %d", *isInGarage);
                 inGarage = *isInGarage;
             }
 
             if (onTrackCar != *isOnTrackCar) {
-                debug(L"IsOnTrackCar is now %d, FshockNom is %f", *isOnTrackCar, FshockNom);
+                debug(L"IsOnTrackCar is now %d", *isOnTrackCar);
                 onTrackCar = *isOnTrackCar;
             }
 
@@ -1026,9 +1026,6 @@ int APIENTRY wWinMain(
                 }
 
                 stopped = false;
-                if (!shockNomSet)
-                    debug(L"We're moving, FshockNom set to: %f", FshockNom);
-                shockNomSet = true;
 
             }
             else {
@@ -1718,12 +1715,22 @@ void debug(wchar_t *fmt, ...) {
     DWORD written;
     va_list argp;
     wchar_t msg[512];
-    va_start(argp, fmt);
+    SYSTEMTIME lt;
 
-    StringCbVPrintf(msg, sizeof(msg) - 4, fmt, argp);
+    GetLocalTime(&lt);
+    StringCbPrintf(
+        msg, sizeof(msg), L"%d-%02d-%02d %02d:%02d:%02d.%03d ",
+        lt.wYear, lt.wMonth, lt.wDay, lt.wHour, lt.wMinute, lt.wSecond, lt.wMilliseconds
+    );
+
+    int len = wcslen(msg);
+
+    va_start(argp, fmt);
+    StringCbVPrintf(msg + len, sizeof(msg) - (len + 2) * sizeof(wchar_t), fmt, argp);
     va_end(argp);
+
     StringCbCat(msg, sizeof(msg), L"\r\n");
-    if (!wcscmp(msg, debugLastMsg)) {
+    if (!wcscmp(msg + len, debugLastMsg)) {
         debugRepeat++;
         return;
     }
@@ -1734,7 +1741,7 @@ void debug(wchar_t *fmt, ...) {
         debugRepeat = 0;
     }
 
-    StringCbCopy(debugLastMsg, sizeof(debugLastMsg), msg);
+    StringCbCopy(debugLastMsg, sizeof(debugLastMsg), msg + len);
     WriteFile(debugHnd, msg, wcslen(msg) * sizeof(wchar_t), &written, NULL);
 
 }

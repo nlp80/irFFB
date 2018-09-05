@@ -677,15 +677,26 @@ PWSTR Settings::getIniPath() {
 PWSTR Settings::getLogPath() {
 
     PWSTR docsPath;
+    wchar_t buf[64];
     wchar_t *path;
+    SYSTEMTIME lt;
 
     if (SHGetKnownFolderPath(FOLDERID_Documents, 0, NULL, &docsPath) != S_OK)
         return nullptr;
 
-    path = new wchar_t[lstrlen(docsPath) + lstrlen(LOG_PATH) + 1];
+    GetLocalTime(&lt);
+    
+    lstrcpyW(buf, L"\\irFFB-");
+    int len = wcslen(buf) * sizeof(wchar_t);
+    StringCbPrintf(
+        buf + wcslen(buf), sizeof(buf) - len, L"%d-%02d-%02d-%02d-%02d-%02d.log",
+        lt.wYear, lt.wMonth, lt.wDay, lt.wHour, lt.wMinute, lt.wSecond
+    );
+
+    path = new wchar_t[lstrlen(docsPath) + lstrlen(buf) + 1];
 
     lstrcpyW(path, docsPath);
-    lstrcatW(path, LOG_PATH);
+    lstrcatW(path, buf);
     CoTaskMemFree(docsPath);
 
     return path;

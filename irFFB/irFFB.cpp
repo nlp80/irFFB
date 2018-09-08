@@ -405,10 +405,10 @@ float getCarRedline() {
 
 void clippingReport() {
 
-    UINT clippedPerCent = samples > 0 ? clippedSamples * 100 / samples : 0;
+    float clippedPerCent = samples > 0 ? clippedSamples * 100 / samples : 0.0f;
     text(L"Max sample value: %d", maxSample);
-    text(L"%u%% of samples were clipped", clippedPerCent);
-    if (clippedPerCent > 5)
+    text(L"%.02f%% of samples were clipped", clippedPerCent);
+    if (clippedPerCent > 5.0f)
         text(L"Consider increasing max force to reduce clipping");
     samples = clippedSamples = maxSample = 0;
 

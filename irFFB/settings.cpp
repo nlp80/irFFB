@@ -107,11 +107,8 @@ sWins_t *Settings::getMaxWnd() { return maxWnd; }
 void Settings::setBumpsWnd(sWins_t *wnd) { bumpsWnd = wnd; }
 sWins_t *Settings::getBumpsWnd() { return bumpsWnd; }
 
-void Settings::setLoadWnd(sWins_t *wnd) { loadWnd = wnd; }
-sWins_t *Settings::getLoadWnd() { return loadWnd; }
-
-void Settings::setLongLoadWnd(sWins_t *wnd) { longLoadWnd = wnd; }
-sWins_t *Settings::getLongLoadWnd() { return longLoadWnd; }
+void Settings::setDampingWnd(sWins_t *wnd) { dampingWnd = wnd; }
+sWins_t *Settings::getDampingWnd() { return dampingWnd; }
 
 void Settings::setSopWnd(sWins_t *wnd) { sopWnd = wnd; }
 sWins_t *Settings::getSopWnd() { return sopWnd; }
@@ -228,36 +225,19 @@ bool Settings::setBumpsFactor(float factor, HWND wnd) {
 }
 float Settings::getBumpsFactor() { return bumpsFactor; }
 
-bool Settings::setLoadFactor(float factor, HWND wnd) {
+bool Settings::setDampingFactor(float factor, HWND wnd) {
     if (factor < 0.0f || factor > 100.0f)
         return false;
-    loadFactor = pow(factor, 2) * LOADFORCE_MULTIPLIER;
-    if (wnd != loadWnd->trackbar)
-        SendMessage(loadWnd->trackbar, TBM_SETPOS, TRUE, (int)factor);
-    if (wnd != loadWnd->value) {
+    dampingFactor = factor;
+    if (wnd != dampingWnd->trackbar)
+        SendMessage(dampingWnd->trackbar, TBM_SETPOS, TRUE, (int)factor);
+    if (wnd != dampingWnd->value) {
         swprintf_s(strbuf, L"%.1f", factor);
-        SendMessage(loadWnd->value, WM_SETTEXT, NULL, LPARAM(strbuf));
-    }
-    EnableWindow(longLoadWnd->trackbar, factor != 0);
-    return true;
-}
-float Settings::getLoadFactor() { return loadFactor; }
-
-bool Settings::setLongLoadFactor(int factor, HWND wnd) {
-    if (factor < 0 || factor > 3)
-        return false;
-    if (factor < 1)
-        factor = 1;
-    longLoadFactor = factor;
-    if (wnd != longLoadWnd->trackbar)
-        SendMessage(longLoadWnd->trackbar, TBM_SETPOS, TRUE, factor);
-    if (wnd != longLoadWnd->value) {
-        swprintf_s(strbuf, L"%d", factor);
-        SendMessage(longLoadWnd->value, WM_SETTEXT, NULL, LPARAM(strbuf));
+        SendMessage(dampingWnd->value, WM_SETTEXT, NULL, LPARAM(strbuf));
     }
     return true;
 }
-int Settings::getLongLoadFactor() { return longLoadFactor; }
+float Settings::getDampingFactor() { return dampingFactor; }
 
 bool Settings::setSopFactor(float factor, HWND wnd) {
     if (factor < 0.0f || factor > 100.0f)
@@ -370,10 +350,6 @@ float Settings::getBumpsSetting() {
     return sqrt(bumpsFactor / BUMPSFORCE_MULTIPLIER);
 }
 
-float Settings::getLoadSetting() {
-    return sqrt(loadFactor / LOADFORCE_MULTIPLIER);
-}
-
 int Settings::getMinForceSetting() {
     return minForce / MINFORCE_MULTIPLIER;
 }
@@ -430,8 +406,7 @@ void Settings::readGenericSettings() {
         setMinForce(0, (HWND)-1);
         setMaxForce(45, (HWND)-1);
         setBumpsFactor(0, (HWND)-1);
-        setLoadFactor(0, (HWND)-1);
-        setLongLoadFactor(1, (HWND)-1);
+        setDampingFactor(0, (HWND)-1);
         setSopFactor(0, (HWND)-1);
         setUse360ForDirect(true);
         return;
@@ -441,8 +416,7 @@ void Settings::readGenericSettings() {
     setMaxForce(getRegSetting(key, L"maxForce", 45), (HWND)-1);
     setMinForce(getRegSetting(key, L"minForce", 0), (HWND)-1);
     setBumpsFactor(getRegSetting(key, L"bumpsFactor", 0.0f), (HWND)-1);
-    setLoadFactor(getRegSetting(key, L"loadFactor", 0.0f), (HWND)-1);
-    setLongLoadFactor(getRegSetting(key, L"longLoadFactor", 1), (HWND)-1);
+    setDampingFactor(getRegSetting(key, L"dampingFactor", 0.0f), (HWND)-1);
     setSopFactor(getRegSetting(key, L"yawFactor", 0.0f), (HWND)-1);
     setSopOffset(getRegSetting(key, L"yawOffset", 0.0f), (HWND)-1);
     setUse360ForDirect(getRegSetting(key, L"use360ForDirect", true));
@@ -482,8 +456,7 @@ void Settings::writeGenericSettings() {
 
     setRegSetting(key, L"ffb", ffbType);
     setRegSetting(key, L"bumpsFactor", getBumpsSetting());
-    setRegSetting(key, L"loadFactor", getLoadSetting());
-    setRegSetting(key, L"longLoadFactor", longLoadFactor);
+    setRegSetting(key, L"dampingFactor", dampingFactor);
     setRegSetting(key, L"yawFactor", sopFactor);
     setRegSetting(key, L"yawOffset", getSopOffsetSetting());
     setRegSetting(key, L"maxForce", maxForce);
@@ -508,7 +481,7 @@ void Settings::readSettingsForCar(char *car) {
 
     char carName[MAX_CAR_NAME];
     int type = 2, min = 0, max = 45, longLoad = 1, use360 = 1;
-    float  bumps = 0.0f, load = 0.0f, yaw = 0.0f, yawOffset = 0.0f;
+    float  bumps = 0.0f, damping = 0.0f, yaw = 0.0f, yawOffset = 0.0f;
 
     memset(carName, 0, sizeof(carName));
 
@@ -517,7 +490,7 @@ void Settings::readSettingsForCar(char *car) {
             sscanf_s(
                 line.c_str(), INI_SCAN_FORMAT,
                 carName, sizeof(carName),
-                &type, &min, &max, &bumps, &load, &longLoad, &use360, &yaw, &yawOffset
+                &type, &min, &max, &bumps, &damping, &longLoad, &use360, &yaw, &yawOffset
             ) < 8
         )
             continue;
@@ -534,8 +507,7 @@ void Settings::readSettingsForCar(char *car) {
     setMinForce(min, (HWND)-1);
     setMaxForce(max, (HWND)-1);
     setBumpsFactor(bumps, (HWND)-1);
-    setLoadFactor(load, (HWND)-1);
-    setLongLoadFactor(longLoad, (HWND)-1);
+    setDampingFactor(damping, (HWND)-1);
     setSopFactor(yaw, (HWND)-1);
     setUse360ForDirect(use360 > 0);
 
@@ -564,7 +536,7 @@ void Settings::writeSettingsForCar(char *car) {
 
     char carName[MAX_CAR_NAME], buf[256];
     int type = 2, min = 0, max = 45, longLoad = 1, use360 = 1;
-    float bumps = 0.0f, load = 0.0f, yaw = 0.0f, yawOffset = 0.0f;
+    float bumps = 0.0f, damping = 0.0f, yaw = 0.0f, yawOffset = 0.0f;
     bool written = false, iniPresent = iniFile.good();
 
     text(L"Writing settings for car %s", car);
@@ -579,7 +551,7 @@ void Settings::writeSettingsForCar(char *car) {
             sscanf_s(
                 line.c_str(), INI_SCAN_FORMAT,
                 carName, sizeof(carName),
-                &type, &min, &max, &bumps, &load, &longLoad, &use360, &yaw, &yawOffset
+                &type, &min, &max, &bumps, &damping, &longLoad, &use360, &yaw, &yawOffset
             ) < 8
         ) {
             strcpy_s(buf, line.c_str());
@@ -594,7 +566,7 @@ void Settings::writeSettingsForCar(char *car) {
         sprintf_s(
             buf, INI_PRINT_FORMAT,
             car, ffbType, getMinForceSetting(), maxForce, getBumpsSetting(),
-            getLoadSetting(), longLoadFactor, use360ForDirect,
+            dampingFactor, 1, use360ForDirect,
             sopFactor, getSopOffsetSetting()
         );
         writeWithNewline(tmpFile, buf);
@@ -605,7 +577,7 @@ void Settings::writeSettingsForCar(char *car) {
         goto MOVE;
 
     if (!iniPresent) {
-        sprintf_s(buf, "car:ffbType:minForce:maxForce:bumps:load:longLoad:effUse360:sop:sopOffset\r\n\r\n");
+        sprintf_s(buf, "car:ffbType:minForce:maxForce:bumps:damping:notUsed:effUse360:sop:sopOffset\r\n\r\n");
         tmpFile.write(buf, strlen(buf));
         sprintf_s(buf, "ffbType     | 0 = 360, 1 = 360I, 2 = 60DF_360, 3 = 60DF_720\r\n");
         tmpFile.write(buf, strlen(buf));
@@ -615,9 +587,9 @@ void Settings::writeSettingsForCar(char *car) {
         tmpFile.write(buf, strlen(buf));
         sprintf_s(buf, "bumps       | min = 0, max = 100\r\n");
         tmpFile.write(buf, strlen(buf));
-        sprintf_s(buf, "load        | min = 0, max = 100\r\n");
+        sprintf_s(buf, "damping     | min = 0, max = 100\r\n");
         tmpFile.write(buf, strlen(buf));
-        sprintf_s(buf, "longLoad    | min = 1, max = 3\r\n");
+        sprintf_s(buf, "notUsed     | N/A\r\n");
         tmpFile.write(buf, strlen(buf));
         sprintf_s(buf, "effUse360   | off = 0, on = 1\r\n");
         tmpFile.write(buf, strlen(buf));
@@ -630,7 +602,7 @@ void Settings::writeSettingsForCar(char *car) {
     sprintf_s(
         buf, INI_PRINT_FORMAT,
         car, ffbType, getMinForceSetting(), maxForce, getBumpsSetting(),
-        getLoadSetting(), longLoadFactor, use360ForDirect, sopFactor, getSopOffsetSetting()
+        dampingFactor, 1, use360ForDirect, sopFactor, getSopOffsetSetting()
     );
     writeWithNewline(tmpFile, buf);
 

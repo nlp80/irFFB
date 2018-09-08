@@ -71,9 +71,8 @@ float firc12[] = {
 char car[MAX_CAR_NAME];
 
 int force = 0, maxSample = 0;
-volatile float suspForce = 0.0f; 
+volatile float suspForce = 0.0f, damperForce = 0.0f; 
 volatile float yawForce[DIRECT_INTERP_SAMPLES];
-volatile float wheelVel = 0.0f;
 __declspec(align(16)) volatile float suspForceST[DIRECT_INTERP_SAMPLES];
 bool onTrack = false, stopped = true, deviceChangePending = false, logiWheel = false;
 
@@ -126,6 +125,12 @@ DWORD WINAPI readWheelThread(LPVOID lParam) {
     HRESULT res;
     JOYSTICK_POSITION vjData;
     ResetVJD(vjDev);
+    LONG lastX;
+    LARGE_INTEGER lastTime, time, elapsed;
+    float v, vel[6] = { 0 };
+    int velIdx = 0;
+
+    lastTime.QuadPart = 0;
 
     while (true) {
 
@@ -175,6 +180,26 @@ DWORD WINAPI readWheelThread(LPVOID lParam) {
             }
 
         UpdateVJD(vjDev, (PVOID)&vjData);
+
+        if (settings.getDampingFactor() == 0.0f)
+            continue;
+        
+        QueryPerformanceCounter(&time);
+
+        if (lastTime.QuadPart != 0) {
+            elapsed.QuadPart = (time.QuadPart - lastTime.QuadPart) * 1000000;
+            elapsed.QuadPart /= freq.QuadPart;
+            vel[velIdx++] = -(joyState.lX - lastX) / (float)elapsed.QuadPart;
+            v = (vel[0] + vel[1] + vel[2] + vel[3] + vel[4] + vel[5]) / 6;
+            v *= settings.getDampingFactor() * 10.0f;
+            damperForce = v;
+            if (velIdx > 5)
+                velIdx = 0;
+        }
+        
+        lastTime.QuadPart = time.QuadPart;
+        lastX = joyState.lX;
+
 
     }
 
@@ -241,6 +266,8 @@ DWORD WINAPI directFFBThread(LPVOID lParam) {
 
             r += scaleTorque(lastYawForce + (yawForce[0] - lastYawForce) / 2.0f);
 
+            r += scaleTorque(damperForce);
+
             setFFB(r);
 
             for (int i = 1; i < DIRECT_INTERP_SAMPLES * 2 - 1; i++) {
@@ -277,6 +304,8 @@ DWORD WINAPI directFFBThread(LPVOID lParam) {
                             yawForce[idx] + (yawForce[idx + 1] - yawForce[idx]) / 2.0f
                     );
 
+                r += scaleTorque(damperForce);
+
                 sleepSpinUntil(&start, 0, 1380 * i);
                 setFFB(r);
 
@@ -300,6 +329,8 @@ DWORD WINAPI directFFBThread(LPVOID lParam) {
 
             r += scaleTorque(yawForce[DIRECT_INTERP_SAMPLES - 1]);
 
+            r += scaleTorque(damperForce);
+
             sleepSpinUntil(&start, 0, 1380 * (DIRECT_INTERP_SAMPLES * 2 - 1));
             setFFB(r);
 
@@ -317,6 +348,8 @@ DWORD WINAPI directFFBThread(LPVOID lParam) {
         if (use360)
             r += scaleTorque(suspForceST[0]);
 
+        r += scaleTorque(damperForce);
+
         setFFB(r);
 
         for (int i = 1; i < DIRECT_INTERP_SAMPLES; i++) {
@@ -327,6 +360,8 @@ DWORD WINAPI directFFBThread(LPVOID lParam) {
 
             if (use360)
                 r += scaleTorque(suspForceST[i]);
+
+            r += scaleTorque(damperForce);
 
             sleepSpinUntil(&start, 2000, 2760 * i);
             setFFB(r);
@@ -506,13 +541,13 @@ int APIENTRY wWinMain(
     float *speed = nullptr, *throttle = nullptr, *rpm = nullptr;
     float *LFshockDeflST = nullptr, *RFshockDeflST = nullptr, *CFshockDeflST = nullptr;
     float *LRshockDeflST = nullptr, *RRshockDeflST = nullptr;
-    float *vX = nullptr, *vY = nullptr, yaw;
+    float *vX = nullptr, *vY = nullptr;
     float LFshockDeflLast = -10000, RFshockDeflLast = -10000, CFshockDeflLast = -10000;
-    float LRshockDeflLast = -10000, RRshockDeflLast = -10000, FshockNom;
+    float LRshockDeflLast = -10000, RRshockDeflLast = -10000;
     bool *isOnTrack = nullptr, *isInGarage = nullptr, *isOnTrackCar = nullptr;
     int *trackSurface = nullptr, *gear = nullptr;
 
-    bool shockNomSet = false, inGarage = false, onTrackCar = false;
+    bool inGarage = false, onTrackCar = false;
     int numHandles = 0, dataLen = 0, lastGear = 0;
     int STnumSamples = 0, STmaxIdx = 0, lastTrackSurface = -1;
     float halfSteerMax = 0, lastTorque = 0, lastSuspForce = 0, redline;
@@ -663,8 +698,8 @@ int APIENTRY wWinMain(
             STnumSamples = irsdk_getVarHeaderEntry(swTorqueSTidx)->count;
             STmaxIdx = STnumSamples - 1;
 
-            lastTorque = FshockNom = 0.0f;
-            onTrack = shockNomSet = false;
+            lastTorque = 0.0f;
+            onTrack = false;
             resetForces();
             irConnected = true;
             timeBeginPeriod(1);
@@ -706,12 +741,12 @@ int APIENTRY wWinMain(
             }
 
             if (*trackSurface != lastTrackSurface) {
-                debug(L"Track surface is now: %d, FshockNom is %f", *trackSurface, FshockNom);
+                debug(L"Track surface is now: %d", *trackSurface);
                 lastTrackSurface = *trackSurface;
             }
 
             if (inGarage != *isInGarage) {
-                debug(L"IsInGarage is now %d, FshockNom is %f", *isInGarage, FshockNom);
+                debug(L"IsInGarage is now %d", *isInGarage);
                 inGarage = *isInGarage;
             }
 
@@ -737,8 +772,6 @@ int APIENTRY wWinMain(
             if (*speed > 2.0f) {
             
                 float bumpsFactor = settings.getBumpsFactor();
-                float loadFactor = settings.getLoadFactor();
-                int longLoadFactor = settings.getLongLoadFactor();
                 float sopFactor = settings.getSopFactor();
                 float sopOffset = settings.getSopOffset();
 
@@ -781,8 +814,7 @@ int APIENTRY wWinMain(
                 }
 
                 if (
-                    LFshockDeflST != nullptr && RFshockDeflST != nullptr &&
-                    (bumpsFactor != 0.0f || loadFactor != 0.0f)
+                    LFshockDeflST != nullptr && RFshockDeflST != nullptr && bumpsFactor != 0.0f
                 ) {
 
                     if (LFshockDeflLast != -10000.0f) {
@@ -843,90 +875,6 @@ int APIENTRY wWinMain(
                                 // write
                                 movaps xmmword ptr suspForceST[0], xmm2
                                 movlps qword ptr suspForceST[16], xmm1
-                                movss xmm3, FshockNom
-                                movss xmm2, loadFactor
-                                xorps xmm1, xmm1
-                                ucomiss xmm3, xmm1
-                                jz end
-                                ucomiss xmm2, xmm1
-                                jz end    
-                                
-                                // xmm6 = LFdefl[0,1,2,3]
-                                // xmm7 = RFdefl[0,1,2,3]
-                                // xmm4 = LFdefl[3,4,5]
-                                // xmm5 = RFdefl[3,4,5]
-                                // xmm3 = Fnom
-                                // xmm1 = LFdefl[0,1,2,3]
-                                movaps xmm1, xmm6
-                                unpcklps xmm3, xmm3
-                                // xmm2 = RFdefl[0,1,2,3]
-                                movaps xmm2, xmm7
-                                unpcklps xmm3, xmm3
-                                // xmm4 = LFdefl[4,5]
-                                psrldq xmm4, 4
-                                // xmm6 = LFdefl - RFdefl[0,1,2,3]
-                                subps xmm6, xmm7
-                                // xmm7 = LFdefl[4,5]
-                                movaps xmm7, xmm4
-                                // xmm5 = RFdefl[4,5]
-                                psrldq xmm5, 4
-                                // xmm7 = LFdefl + RFdefl [4,5]
-                                addps xmm7, xmm5
-                                // xmm1 = LFdefl + RFdefl [0,1,2,3]
-                                addps xmm1, xmm2
-                                // xmm4 = LFdefl - RFdefl[4,5]
-                                subps xmm4, xmm5
-                                movss xmm5, loadFactor
-                                // xmm1 = LFdefl + RFdefl / Fnom [0,1,2,3]
-                                divps xmm1, xmm3
-                                unpcklps xmm5, xmm5
-                                // xmm7 = LFdefl + RFdefl / Fnom [4,5]
-                                divps xmm7, xmm3
-                                // xmm1 = (LFdefl + RFdefl / Fnom) ^ 2 [0,1,2,3] 
-                                mulps xmm1, xmm1
-                                mov eax, dword ptr longLoadFactor
-                                movaps xmm0, xmm1
-                                // xmm7 = (LFdefl + RFdefl / Fnom) ^ 2 [4,5]
-                                mulps xmm7, xmm7
-                                unpcklps xmm5, xmm5
-                                movaps xmm3, xmm7
-                                // xmm1 = (LFdefl + RFdefl / Fnom) ^ 4 [0,1,2,3] 
-                                mulps xmm1, xmm1
-                                cmp eax, 2
-                                // xmm7 = (LFdefl + RFdefl / Fnom) ^ 4 [4,5]
-                                mulps xmm7, xmm7
-                                jl upd
-                                jg oct
-                                // xmm1 = (LFdefl + RFdefl / Fnom) ^ 6 [0,1,2,3] 
-                                mulps xmm1, xmm0
-                                // xmm7 = (LFdefl + RFdefl / Fnom) ^ 6 [4,5]    
-                                mulps xmm7, xmm3
-                                jmp upd
-                             oct:
-                                // xmm1 = (LFdefl + RFdefl / Fnom) ^ 8 [0,1,2,3] 
-                                mulps xmm1, xmm1
-                                // xmm7 = (LFdefl + RFdefl / Fnom) ^ 8 [4,5]    
-                                mulps xmm7, xmm7
-                            upd:                       
-                                // xmm1 = ((LFdefl - Fnom/2) - (RFdefl - Fnom/2)) * ((LFdefl + RFdefl) / Fnom) ^ n) [0,1,2,3]
-                                mulps xmm1, xmm6
-                                movaps xmm2, xmmword ptr suspForceST[0]
-                                // xmm7 = ((LFdefl - Fnom/2) - (RFdefl - Fnom/2)) * ((LFdefl + RFdefl) / Fnom) ^ n) [4,5]
-                                mulps xmm7, xmm4
-                                // xmm1 *= loadFactor
-                                mulps xmm1, xmm5
-                                movlps xmm3, qword ptr suspForceST[16]
-                                // xmm7 *= loadFactor
-                                mulps xmm7, xmm5
-                                // add to suspForceST
-                                addps xmm2, xmm1
-                                addps xmm3, xmm7
-                                // write
-                                movaps xmmword ptr suspForceST[0], xmm2
-                                movlps qword ptr suspForceST[16], xmm3
-
-                            end:
-
                             }
         
                         }
@@ -936,21 +884,6 @@ int APIENTRY wWinMain(
                                     (LFshockDeflST[STmaxIdx] - LFshockDeflLast) -
                                     (RFshockDeflST[STmaxIdx] - RFshockDeflLast)
                                 ) * bumpsFactor * 0.25f;
-
-                            if (FshockNom != 0.0f && loadFactor != 0.0f) {
-
-                                float Ftot = (LFshockDeflST[STmaxIdx] + RFshockDeflST[STmaxIdx]) / FshockNom;
-                                float Ftot2 = Ftot * Ftot;
-                                float Ftot4 = Ftot2 * Ftot2;
-
-                                suspForce +=
-                                    (LFshockDeflST[STmaxIdx] - RFshockDeflST[STmaxIdx]) *
-                                        (
-                                            longLoadFactor == 1 ? Ftot4 :
-                                                (longLoadFactor == 2 ? Ftot4 * Ftot2 : Ftot4 * Ftot4)
-                                        ) * loadFactor;
-
-                            }
                         }
 
                         if (jetseat && jetseat->isEnabled()) {
@@ -1074,7 +1007,7 @@ int APIENTRY wWinMain(
                     invFactor = 1.0f - factor;
                 }
 
-                setFFB((int)(factor * DI_MAX + scaleTorque(*swTorque) * invFactor));
+                setFFB((int)(factor * DI_MAX + scaleTorque(*swTorque) * invFactor + scaleTorque(damperForce)));
                 continue;
 
             }
@@ -1085,12 +1018,12 @@ int APIENTRY wWinMain(
                 case FFBTYPE_360HZ: {
 
                     for (int i = 0; i < STmaxIdx; i++) {
-                        setFFB(scaleTorque(swTorqueST[i] + suspForceST[i] + yawForce[i]));
+                        setFFB(scaleTorque(swTorqueST[i] + suspForceST[i] + yawForce[i] + damperForce));
                         sleepSpinUntil(&start, 2000, 2760 * (i + 1));
                     }
                     setFFB(
                         scaleTorque(
-                            swTorqueST[STmaxIdx] + suspForceST[STmaxIdx] + yawForce[STmaxIdx]
+                            swTorqueST[STmaxIdx] + suspForceST[STmaxIdx] + yawForce[STmaxIdx] + damperForce
                         )
                     );
 
@@ -1105,7 +1038,7 @@ int APIENTRY wWinMain(
 
                     setFFB(
                         scaleTorque(
-                            lastTorque + diff + lastSuspForce + sdiff + yawForce[0]
+                            lastTorque + diff + lastSuspForce + sdiff + yawForce[0] + damperForce
                         )
                     );
 
@@ -1119,13 +1052,13 @@ int APIENTRY wWinMain(
                             force =
                                 scaleTorque(
                                     swTorqueST[idx] + diff + suspForceST[idx] +
-                                        sdiff + yawForce[idx]
+                                        sdiff + yawForce[idx] + damperForce
                                 );
                         }
                         else
                             force =
                                 scaleTorque(
-                                    swTorqueST[idx] + suspForceST[idx] + yawForce[idx]
+                                    swTorqueST[idx] + suspForceST[idx] + yawForce[idx] + damperForce
                                 );
 
                         sleepSpinUntil(&start, 0, 1380 * (i + 1));
@@ -1136,7 +1069,7 @@ int APIENTRY wWinMain(
                     sleepSpinUntil(&start, 0, 1380 * (iMax + 1));
                     setFFB(
                         scaleTorque(
-                            swTorqueST[STmaxIdx] + suspForceST[STmaxIdx] + yawForce[STmaxIdx]
+                            swTorqueST[STmaxIdx] + suspForceST[STmaxIdx] + yawForce[STmaxIdx] + damperForce
                         )
                     );
                     lastTorque = swTorqueST[STmaxIdx];
@@ -1376,9 +1309,7 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow) {
     settings.setMinWnd(slider(mainWnd, L"Min force:", 44, 154, L"0", L"20", false));
     settings.setMaxWnd(slider(mainWnd, L"Max force:", 44, 226, L"5 Nm", L"65 Nm", false));
     settings.setBumpsWnd(slider(mainWnd, L"Suspension bumps:", 464, 40, L"0", L"100", true));
-    settings.setLoadWnd(slider(mainWnd, L"Suspension load:", 464, 100, L"0", L"100", true));
-    settings.setLongLoadWnd(slider(mainWnd, L"Longitudinal load factor:", 464, 160, L"1", L"3", false));
-    SendMessage(settings.getLongLoadWnd()->trackbar, TBM_SETRANGE, true, MAKELPARAM(1, 3));
+    settings.setDampingWnd(slider(mainWnd, L"Damping:", 464, 100, L"0", L"100", true));
     settings.setSopWnd(slider(mainWnd, L"SoP effect:", 464, 220, L"0", L"100", true));
     settings.setSopOffsetWnd(slider(mainWnd, L"SoP deadzone:", 464, 280, L"0", L"100", true));
     settings.setUse360Wnd(
@@ -1517,10 +1448,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 settings.setMinForce(wParam, wnd);
             else if (wnd == settings.getBumpsWnd()->value)
                 settings.setBumpsFactor(reinterpret_cast<float &>(wParam), wnd);
-            else if (wnd == settings.getLoadWnd()->value)
-                settings.setLoadFactor(reinterpret_cast<float &>(wParam), wnd);
-            else if (wnd == settings.getLongLoadWnd()->value)
-                settings.setLongLoadFactor(wParam, wnd);
+            else if (wnd == settings.getDampingWnd()->value)
+                settings.setDampingFactor(reinterpret_cast<float &>(wParam), wnd);
             else if (wnd == settings.getSopWnd()->value)
                 settings.setSopFactor(reinterpret_cast<float &>(wParam), wnd);
             else if (wnd == settings.getSopOffsetWnd()->value)
@@ -1536,10 +1465,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 settings.setMinForce(SendMessage(wnd, TBM_GETPOS, 0, 0), wnd);
             else if (wnd == settings.getBumpsWnd()->trackbar)
                 settings.setBumpsFactor((float)SendMessage(wnd, TBM_GETPOS, 0, 0), wnd);
-            else if (wnd == settings.getLoadWnd()->trackbar)
-                settings.setLoadFactor((float)SendMessage(wnd, TBM_GETPOS, 0, 0), wnd);
-            else if (wnd == settings.getLongLoadWnd()->trackbar)
-                settings.setLongLoadFactor(SendMessage(wnd, TBM_GETPOS, 0, 0), wnd);
+            else if (wnd == settings.getDampingWnd()->trackbar)
+                settings.setDampingFactor((float)SendMessage(wnd, TBM_GETPOS, 0, 0), wnd);
             else if (wnd == settings.getSopWnd()->trackbar)
                 settings.setSopFactor((float)SendMessage(wnd, TBM_GETPOS, 0, 0), wnd);
             else if (wnd == settings.getSopOffsetWnd()->trackbar)

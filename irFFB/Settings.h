@@ -25,10 +25,8 @@ class Settings {
         sWins_t *getMaxWnd();
         void setBumpsWnd(sWins_t *);
         sWins_t *getBumpsWnd();
-        void setLoadWnd(sWins_t *);
-        sWins_t *getLoadWnd();
-        void setLongLoadWnd(sWins_t *);
-        sWins_t *getLongLoadWnd();
+        void setDampingWnd(sWins_t *);
+        sWins_t *getDampingWnd();
         void setSopWnd(sWins_t *);
         sWins_t *getSopWnd();
         void setSopOffsetWnd(sWins_t *);
@@ -59,10 +57,8 @@ class Settings {
         float getScaleFactor();
         bool setBumpsFactor(float, HWND);
         float getBumpsFactor();
-        bool setLoadFactor(float, HWND);
-        float getLoadFactor();
-        bool setLongLoadFactor(int, HWND);
-        int getLongLoadFactor();
+        bool setDampingFactor(float, HWND);
+        float getDampingFactor();
         bool setSopFactor(float, HWND);
         float getSopFactor();
         bool setSopOffset(float, HWND);
@@ -80,7 +76,6 @@ class Settings {
         void setDebug(bool);
         bool getDebug();
         float getBumpsSetting();
-        float getLoadSetting();
         int getMinForceSetting();
         float getSopOffsetSetting();
         void writeCarSpecificSetting();
@@ -94,11 +89,11 @@ class Settings {
 
     private:
         HWND devWnd, ffbWnd;
-        sWins_t *minWnd, *maxWnd, *bumpsWnd, *loadWnd, *longLoadWnd, *sopWnd, *sopOffsetWnd;
+        sWins_t *minWnd, *maxWnd, *bumpsWnd, *dampingWnd, *sopWnd, *sopOffsetWnd;
         HWND use360Wnd, carSpecificWnd, reduceWhenParkedWnd;
         HWND runOnStartupWnd, startMinimisedWnd, debugWnd;
-        int ffbType, ffdeviceIdx, minForce, maxForce, longLoadFactor;
-        float scaleFactor, bumpsFactor, loadFactor, sopFactor, sopOffset;
+        int ffbType, ffdeviceIdx, minForce, maxForce;
+        float scaleFactor, bumpsFactor, dampingFactor, sopFactor, sopOffset;
         bool use360ForDirect, useCarSpecific, debug;
         bool reduceWhenParked, runOnStartup, startMinimised;
         GUID devGuid = GUID_NULL, ffdevices[MAX_FFB_DEVICES];

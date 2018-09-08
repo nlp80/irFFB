@@ -266,8 +266,6 @@ DWORD WINAPI directFFBThread(LPVOID lParam) {
 
             r += scaleTorque(lastYawForce + (yawForce[0] - lastYawForce) / 2.0f);
 
-            r += scaleTorque(damperForce);
-
             setFFB(r);
 
             for (int i = 1; i < DIRECT_INTERP_SAMPLES * 2 - 1; i++) {
@@ -304,8 +302,6 @@ DWORD WINAPI directFFBThread(LPVOID lParam) {
                             yawForce[idx] + (yawForce[idx + 1] - yawForce[idx]) / 2.0f
                     );
 
-                r += scaleTorque(damperForce);
-
                 sleepSpinUntil(&start, 0, 1380 * i);
                 setFFB(r);
 
@@ -329,8 +325,6 @@ DWORD WINAPI directFFBThread(LPVOID lParam) {
 
             r += scaleTorque(yawForce[DIRECT_INTERP_SAMPLES - 1]);
 
-            r += scaleTorque(damperForce);
-
             sleepSpinUntil(&start, 0, 1380 * (DIRECT_INTERP_SAMPLES * 2 - 1));
             setFFB(r);
 
@@ -348,8 +342,6 @@ DWORD WINAPI directFFBThread(LPVOID lParam) {
         if (use360)
             r += scaleTorque(suspForceST[0]);
 
-        r += scaleTorque(damperForce);
-
         setFFB(r);
 
         for (int i = 1; i < DIRECT_INTERP_SAMPLES; i++) {
@@ -360,8 +352,6 @@ DWORD WINAPI directFFBThread(LPVOID lParam) {
 
             if (use360)
                 r += scaleTorque(suspForceST[i]);
-
-            r += scaleTorque(damperForce);
 
             sleepSpinUntil(&start, 2000, 2760 * i);
             setFFB(r);
@@ -551,7 +541,7 @@ int APIENTRY wWinMain(
     int numHandles = 0, dataLen = 0, lastGear = 0;
     int STnumSamples = 0, STmaxIdx = 0, lastTrackSurface = -1;
     float halfSteerMax = 0, lastTorque = 0, lastSuspForce = 0, redline;
-    float yawFilter[DIRECT_INTERP_SAMPLES];
+    float yaw = 0.0f, yawFilter[DIRECT_INTERP_SAMPLES];
 
     ccEx.dwICC = ICC_WIN95_CLASSES | ICC_BAR_CLASSES | ICC_STANDARD_CLASSES;
     ccEx.dwSize = sizeof(ccEx);
@@ -1007,7 +997,7 @@ int APIENTRY wWinMain(
                     invFactor = 1.0f - factor;
                 }
 
-                setFFB((int)(factor * DI_MAX + scaleTorque(*swTorque) * invFactor + scaleTorque(damperForce)));
+                setFFB((int)(factor * DI_MAX + scaleTorque(*swTorque) * invFactor));
                 continue;
 
             }
@@ -1018,12 +1008,12 @@ int APIENTRY wWinMain(
                 case FFBTYPE_360HZ: {
 
                     for (int i = 0; i < STmaxIdx; i++) {
-                        setFFB(scaleTorque(swTorqueST[i] + suspForceST[i] + yawForce[i] + damperForce));
+                        setFFB(scaleTorque(swTorqueST[i] + suspForceST[i] + yawForce[i]));
                         sleepSpinUntil(&start, 2000, 2760 * (i + 1));
                     }
                     setFFB(
                         scaleTorque(
-                            swTorqueST[STmaxIdx] + suspForceST[STmaxIdx] + yawForce[STmaxIdx] + damperForce
+                            swTorqueST[STmaxIdx] + suspForceST[STmaxIdx] + yawForce[STmaxIdx]
                         )
                     );
 
@@ -1038,7 +1028,7 @@ int APIENTRY wWinMain(
 
                     setFFB(
                         scaleTorque(
-                            lastTorque + diff + lastSuspForce + sdiff + yawForce[0] + damperForce
+                            lastTorque + diff + lastSuspForce + sdiff + yawForce[0]
                         )
                     );
 
@@ -1052,13 +1042,13 @@ int APIENTRY wWinMain(
                             force =
                                 scaleTorque(
                                     swTorqueST[idx] + diff + suspForceST[idx] +
-                                        sdiff + yawForce[idx] + damperForce
+                                        sdiff + yawForce[idx]
                                 );
                         }
                         else
                             force =
                                 scaleTorque(
-                                    swTorqueST[idx] + suspForceST[idx] + yawForce[idx] + damperForce
+                                    swTorqueST[idx] + suspForceST[idx] + yawForce[idx]
                                 );
 
                         sleepSpinUntil(&start, 0, 1380 * (i + 1));
@@ -1069,7 +1059,7 @@ int APIENTRY wWinMain(
                     sleepSpinUntil(&start, 0, 1380 * (iMax + 1));
                     setFFB(
                         scaleTorque(
-                            swTorqueST[STmaxIdx] + suspForceST[STmaxIdx] + yawForce[STmaxIdx] + damperForce
+                            swTorqueST[STmaxIdx] + suspForceST[STmaxIdx] + yawForce[STmaxIdx]
                         )
                     );
                     lastTorque = swTorqueST[STmaxIdx];
@@ -2052,7 +2042,9 @@ inline void setFFB(int mag) {
             mag = -minForce;
     }
 
-    pforce.lOffset = mag;
+    float df = damperForce;
+
+    pforce.lOffset = mag + scaleTorque(df);
     HRESULT hr = effect->SetParameters(&dieff, DIEP_TYPESPECIFICPARAMS | DIEP_NORESTART);
     if (hr != DI_OK) {
         debug(L"SetParameters returned 0x%x, requesting reacquire", hr);

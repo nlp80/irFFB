@@ -39,9 +39,6 @@
     <ClCompile Include="vJoyInterface.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="tractionloss.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="hidguardian.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -81,9 +78,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="stdafx.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="tractionloss.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="hidguardian.h">

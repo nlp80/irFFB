@@ -127,7 +127,7 @@ DWORD WINAPI readWheelThread(LPVOID lParam) {
     ResetVJD(vjDev);
     LONG lastX;
     LARGE_INTEGER lastTime, time, elapsed;
-    float v, vel[6] = { 0 };
+    float v, vel[8] = { 0 };
     int velIdx = 0;
 
     lastTime.QuadPart = 0;
@@ -189,11 +189,10 @@ DWORD WINAPI readWheelThread(LPVOID lParam) {
         if (lastTime.QuadPart != 0) {
             elapsed.QuadPart = (time.QuadPart - lastTime.QuadPart) * 1000000;
             elapsed.QuadPart /= freq.QuadPart;
-            vel[velIdx++] = -(joyState.lX - lastX) / (float)elapsed.QuadPart;
-            v = (vel[0] + vel[1] + vel[2] + vel[3] + vel[4] + vel[5]) / 6;
-            v *= settings.getDampingFactor() * 10.0f;
+            vel[velIdx++] = (float)(joyState.lX - lastX) / elapsed.QuadPart;
+            v = vel[0] + vel[1] + vel[2] + vel[3] + vel[4] + vel[5] + vel[6] + vel[7];
             damperForce = v;
-            if (velIdx > 5)
+            if (velIdx > 7)
                 velIdx = 0;
         }
         
@@ -430,7 +429,7 @@ float getCarRedline() {
 
 void clippingReport() {
 
-    float clippedPerCent = samples > 0 ? clippedSamples * 100 / samples : 0.0f;
+    float clippedPerCent = samples > 0 ? (float)clippedSamples * 100.0f / samples : 0.0f;
     text(L"Max sample value: %d", maxSample);
     text(L"%.02f%% of samples were clipped", clippedPerCent);
     if (clippedPerCent > 5.0f)
@@ -982,23 +981,29 @@ int APIENTRY wWinMain(
             halfSteerMax = *steerMax / 2.0f;
 
             // Bump stops
-            if (abs(halfSteerMax) < 8.0f && abs(*steer) > halfSteerMax) {
+            if (abs(halfSteerMax) < 8.0f) {
+                if (abs(*steer) > halfSteerMax) {
 
-                float factor, invFactor;
+                    float factor, invFactor;
 
-                if (*steer > 0) {
-                    factor = (-(*steer - halfSteerMax)) / STOPS_MAXFORCE_RAD;
-                    factor = maxf(factor, -1.0f);
-                    invFactor = 1.0f + factor;
+                    if (*steer > 0) {
+                        factor = (-(*steer - halfSteerMax)) / STOPS_MAXFORCE_RAD;
+                        factor = maxf(factor, -1.0f);
+                        invFactor = 1.0f + factor;
+                    }
+                    else {
+                        factor = (-(*steer + halfSteerMax)) / STOPS_MAXFORCE_RAD;
+                        factor = minf(factor, 1.0f);
+                        invFactor = 1.0f - factor;
+                    }
+
+                    setFFB((int)(factor * DI_MAX + scaleTorque(*swTorque) * invFactor + damperForce * 3000.0f));
+                    continue;
                 }
-                else {
-                    factor = (-(*steer + halfSteerMax)) / STOPS_MAXFORCE_RAD;
-                    factor = minf(factor, 1.0f);
-                    invFactor = 1.0f - factor;
+                else if (abs(*steer) > halfSteerMax - STOPS_MAXFORCE_RAD * 2.0f) {
+                    setFFB((scaleTorque(*swTorque) + (int)(damperForce * 3000.0f)));
+                    continue;
                 }
-
-                setFFB((int)(factor * DI_MAX + scaleTorque(*swTorque) * invFactor));
-                continue;
 
             }
 
@@ -2016,6 +2021,11 @@ inline void setFFB(int mag) {
     if (!effect)
         return;
 
+    float df = damperForce;
+    int d = (int)(df * 30.0f * settings.getDampingFactor());
+    
+    mag += d;
+
     int amag = abs(mag);
 
     if (amag > maxSample)
@@ -2042,9 +2052,7 @@ inline void setFFB(int mag) {
             mag = -minForce;
     }
 
-    float df = damperForce;
-
-    pforce.lOffset = mag + scaleTorque(df);
+    pforce.lOffset = mag;
     HRESULT hr = effect->SetParameters(&dieff, DIEP_TYPESPECIFICPARAMS | DIEP_NORESTART);
     if (hr != DI_OK) {
         debug(L"SetParameters returned 0x%x, requesting reacquire", hr);

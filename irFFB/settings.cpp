@@ -116,6 +116,12 @@ sWins_t *Settings::getSopWnd() { return sopWnd; }
 void Settings::setSopOffsetWnd(sWins_t *wnd) { sopOffsetWnd = wnd; }
 sWins_t *Settings::getSopOffsetWnd() { return sopOffsetWnd; }
 
+void Settings::setUndersteerWnd(sWins_t *wnd) { understeerWnd = wnd; }
+sWins_t *Settings::getUndersteerWnd() { return understeerWnd; }
+
+void Settings::setUndersteerOffsetWnd(sWins_t *wnd) { understeerOffsetWnd = wnd; }
+sWins_t *Settings::getUndersteerOffsetWnd() { return understeerOffsetWnd; }
+
 void Settings::setUse360Wnd(HWND wnd) { use360Wnd = wnd; }
 HWND Settings::getUse360Wnd() { return use360Wnd; }
 void Settings::setReduceWhenParkedWnd(HWND wnd) { reduceWhenParkedWnd = wnd; }
@@ -268,6 +274,34 @@ bool Settings::setSopOffset(float offset, HWND wnd) {
 }
 float Settings::getSopOffset() { return sopOffset; }
 
+bool Settings::setUndersteerFactor(float factor, HWND wnd) {
+    if (factor < 0.0f || factor > 100.0f)
+        return false;
+    understeerFactor = factor;
+    if (wnd != understeerWnd->trackbar)
+        SendMessage(understeerWnd->trackbar, TBM_SETPOS, TRUE, (int)factor);
+    if (wnd != understeerWnd->value) {
+        swprintf_s(strbuf, L"%.1f", factor);
+        SendMessage(understeerWnd->value, WM_SETTEXT, NULL, LPARAM(strbuf));
+    }
+    return true;
+}
+float Settings::getUndersteerFactor() { return understeerFactor; }
+
+bool Settings::setUndersteerOffset(float offset, HWND wnd) {
+    if (offset < 0.0f || offset > 100.0f)
+        return false;
+    understeerOffset = offset / 250.0f;
+    if (wnd != understeerOffsetWnd->trackbar)
+        SendMessage(understeerOffsetWnd->trackbar, TBM_SETPOS, TRUE, (int)offset);
+    if (wnd != understeerOffsetWnd->value) {
+        swprintf_s(strbuf, L"%.1f", offset);
+        SendMessage(understeerOffsetWnd->value, WM_SETTEXT, NULL, LPARAM(strbuf));
+    }
+    return true;
+}
+float Settings::getUndersteerOffset() { return understeerOffset; }
+
 void Settings::setUse360ForDirect(bool set) {
     use360ForDirect = set;
     SendMessage(use360Wnd, BM_SETCHECK, set ? BST_CHECKED : BST_UNCHECKED, NULL);
@@ -358,6 +392,10 @@ float Settings::getSopOffsetSetting() {
     return sopOffset * 572.958f;
 }
 
+float Settings::getUndersteerOffsetSetting() {
+    return understeerOffset * 250.0f;
+}
+
 void Settings::writeCarSpecificSetting() {
     
     HKEY key = getSettingsRegKey();
@@ -405,9 +443,12 @@ void Settings::readGenericSettings() {
         setFfbType(FFBTYPE_DIRECT_FILTER);
         setMinForce(0, (HWND)-1);
         setMaxForce(45, (HWND)-1);
-        setBumpsFactor(0, (HWND)-1);
-        setDampingFactor(0, (HWND)-1);
-        setSopFactor(0, (HWND)-1);
+        setBumpsFactor(0.0f, (HWND)-1);
+        setDampingFactor(0.0f, (HWND)-1);
+        setSopFactor(0.0f, (HWND)-1);
+        setSopOffset(0.0f, (HWND)-1);
+        setUndersteerFactor(0.0f, (HWND)-1);
+        setUndersteerOffset(0.0f, (HWND)-1);
         setUse360ForDirect(true);
         return;
     }
@@ -419,6 +460,8 @@ void Settings::readGenericSettings() {
     setDampingFactor(getRegSetting(key, L"dampingFactor", 0.0f), (HWND)-1);
     setSopFactor(getRegSetting(key, L"yawFactor", 0.0f), (HWND)-1);
     setSopOffset(getRegSetting(key, L"yawOffset", 0.0f), (HWND)-1);
+    setUndersteerFactor(getRegSetting(key, L"understeerFactor", 0.0f), (HWND)-1);
+    setUndersteerOffset(getRegSetting(key, L"understeerOffset", 0.0f), (HWND)-1);
     setUse360ForDirect(getRegSetting(key, L"use360ForDirect", true));
 
     RegCloseKey(key);
@@ -481,7 +524,8 @@ void Settings::readSettingsForCar(char *car) {
 
     char carName[MAX_CAR_NAME];
     int type = 2, min = 0, max = 45, longLoad = 1, use360 = 1;
-    float  bumps = 0.0f, damping = 0.0f, yaw = 0.0f, yawOffset = 0.0f;
+    float bumps = 0.0f, damping = 0.0f, yaw = 0.0f, yawOffset = 0.0f;
+    float understeer = 0.0f, understeerOffset = 0.0f;
 
     memset(carName, 0, sizeof(carName));
 
@@ -490,7 +534,8 @@ void Settings::readSettingsForCar(char *car) {
             sscanf_s(
                 line.c_str(), INI_SCAN_FORMAT,
                 carName, sizeof(carName),
-                &type, &min, &max, &bumps, &damping, &longLoad, &use360, &yaw, &yawOffset
+                &type, &min, &max, &bumps, &damping, &longLoad, &use360, &yaw,
+                &yawOffset, &understeer, &understeerOffset
             ) < 8
         )
             continue;
@@ -509,6 +554,9 @@ void Settings::readSettingsForCar(char *car) {
     setBumpsFactor(bumps, (HWND)-1);
     setDampingFactor(damping, (HWND)-1);
     setSopFactor(yaw, (HWND)-1);
+    setSopOffset(yawOffset, (HWND)-1);
+    setUndersteerFactor(understeer, (HWND)-1);
+    setUndersteerOffset(understeerOffset, (HWND)-1);
     setUse360ForDirect(use360 > 0);
 
 DONE:
@@ -537,6 +585,7 @@ void Settings::writeSettingsForCar(char *car) {
     char carName[MAX_CAR_NAME], buf[256];
     int type = 2, min = 0, max = 45, longLoad = 1, use360 = 1;
     float bumps = 0.0f, damping = 0.0f, yaw = 0.0f, yawOffset = 0.0f;
+    float understeer = 0.0f, understeerOffset = 0.0f;
     bool written = false, iniPresent = iniFile.good();
 
     text(L"Writing settings for car %s", car);
@@ -551,7 +600,8 @@ void Settings::writeSettingsForCar(char *car) {
             sscanf_s(
                 line.c_str(), INI_SCAN_FORMAT,
                 carName, sizeof(carName),
-                &type, &min, &max, &bumps, &damping, &longLoad, &use360, &yaw, &yawOffset
+                &type, &min, &max, &bumps, &damping, &longLoad, &use360,
+                &yaw, &yawOffset, &understeer, &understeerOffset
             ) < 8
         ) {
             strcpy_s(buf, line.c_str());
@@ -566,8 +616,8 @@ void Settings::writeSettingsForCar(char *car) {
         sprintf_s(
             buf, INI_PRINT_FORMAT,
             car, ffbType, getMinForceSetting(), maxForce, getBumpsSetting(),
-            dampingFactor, 1, use360ForDirect,
-            sopFactor, getSopOffsetSetting()
+            dampingFactor, 1, use360ForDirect, sopFactor, getSopOffsetSetting(),
+            understeerFactor, getUndersteerOffsetSetting()
         );
         writeWithNewline(tmpFile, buf);
         written = true;
@@ -577,32 +627,37 @@ void Settings::writeSettingsForCar(char *car) {
         goto MOVE;
 
     if (!iniPresent) {
-        sprintf_s(buf, "car:ffbType:minForce:maxForce:bumps:damping:notUsed:effUse360:sop:sopOffset\r\n\r\n");
+        sprintf_s(buf, "car:ffbType:minForce:maxForce:bumps:damping:notUsed:effUse360:sop:sopOffset:understeer:understeerOffset\r\n\r\n");
         tmpFile.write(buf, strlen(buf));
-        sprintf_s(buf, "ffbType     | 0 = 360, 1 = 360I, 2 = 60DF_360, 3 = 60DF_720\r\n");
+        sprintf_s(buf, "ffbType          | 0 = 360, 1 = 360I, 2 = 60DF_360, 3 = 60DF_720\r\n");
         tmpFile.write(buf, strlen(buf));
-        sprintf_s(buf, "minForce    | min = 0, max = 20\r\n");
+        sprintf_s(buf, "minForce         | min = 0, max = 20\r\n");
         tmpFile.write(buf, strlen(buf));
-        sprintf_s(buf, "maxForce    | min = %d, max = %d\r\n", MIN_MAXFORCE, MAX_MAXFORCE);
+        sprintf_s(buf, "maxForce         | min = %d, max = %d\r\n", MIN_MAXFORCE, MAX_MAXFORCE);
         tmpFile.write(buf, strlen(buf));
-        sprintf_s(buf, "bumps       | min = 0, max = 100\r\n");
+        sprintf_s(buf, "bumps            | min = 0, max = 100\r\n");
         tmpFile.write(buf, strlen(buf));
-        sprintf_s(buf, "damping     | min = 0, max = 100\r\n");
+        sprintf_s(buf, "damping          | min = 0, max = 100\r\n");
         tmpFile.write(buf, strlen(buf));
-        sprintf_s(buf, "notUsed     | N/A\r\n");
+        sprintf_s(buf, "notUsed          | N/A\r\n");
         tmpFile.write(buf, strlen(buf));
-        sprintf_s(buf, "effUse360   | off = 0, on = 1\r\n");
+        sprintf_s(buf, "effUse360        | off = 0, on = 1\r\n");
         tmpFile.write(buf, strlen(buf));
-        sprintf_s(buf, "sop         | min = 0, max = 100\r\n\r\n");
+        sprintf_s(buf, "sop              | min = 0, max = 100\r\n\r\n");
         tmpFile.write(buf, strlen(buf));
-        sprintf_s(buf, "sopOffset   | min = 0, max = 100\r\n\r\n");
+        sprintf_s(buf, "sopOffset        | min = 0, max = 100\r\n\r\n");
+        tmpFile.write(buf, strlen(buf));
+        sprintf_s(buf, "understeer       | min = 0, max = 100\r\n\r\n");
+        tmpFile.write(buf, strlen(buf));
+        sprintf_s(buf, "understeerOffset | min = 0, max = 100\r\n\r\n");
         tmpFile.write(buf, strlen(buf));
     }
 
     sprintf_s(
         buf, INI_PRINT_FORMAT,
         car, ffbType, getMinForceSetting(), maxForce, getBumpsSetting(),
-        dampingFactor, 1, use360ForDirect, sopFactor, getSopOffsetSetting()
+        dampingFactor, 1, use360ForDirect, sopFactor, getSopOffsetSetting(),
+        understeerFactor, getUndersteerOffsetSetting()
     );
     writeWithNewline(tmpFile, buf);
 

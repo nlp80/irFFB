@@ -69,6 +69,12 @@ float firc12[] = {
 };
 
 char car[MAX_CAR_NAME];
+struct understeerCoefs usteerCoefs[] = {
+    {
+        "ferrari488gte", 0.44f, 0.46f
+    }
+};
+
 
 int force = 0, maxSample = 0;
 volatile float suspForce = 0.0f, damperForce = 0.0f; 
@@ -78,7 +84,8 @@ bool onTrack = false, stopped = true, deviceChangePending = false, logiWheel = f
 
 bool elevated = false;
 
-volatile bool reacquireNeeded = false;
+volatile int ffbMag = 0;
+volatile bool nearStops = false;
 
 int numButtons = 0, numPov = 0, vjButtons = 0, vjPov = 0;
 UINT samples, clippedSamples;
@@ -127,8 +134,8 @@ DWORD WINAPI readWheelThread(LPVOID lParam) {
     ResetVJD(vjDev);
     LONG lastX;
     LARGE_INTEGER lastTime, time, elapsed;
-    float v, vel[8] = { 0 };
-    int velIdx = 0;
+    float vel[6] = { 0.0f }, fd[4] = { 0.0f };
+    int velIdx = 0, vi = 0, fdIdx = 0;
 
     lastTime.QuadPart = 0;
 
@@ -136,13 +143,13 @@ DWORD WINAPI readWheelThread(LPVOID lParam) {
 
         WaitForSingleObject(wheelEvent, INFINITE);
 
-        if (!ffdevice || reacquireNeeded)
+        if (!ffdevice)
             continue;
 
         res = ffdevice->GetDeviceState(sizeof(joyState), &joyState);
         if (res != DI_OK) {
             debug(L"GetDeviceState returned: 0x%x, requesting reacquire", res);
-            reacquireNeeded = true;
+            reacquireDIDevice();
             continue;
         }
 
@@ -181,24 +188,58 @@ DWORD WINAPI readWheelThread(LPVOID lParam) {
 
         UpdateVJD(vjDev, (PVOID)&vjData);
 
-        if (settings.getDampingFactor() == 0.0f)
-            continue;
+        float d = 0.0f;
         
-        QueryPerformanceCounter(&time);
+        if (settings.getDampingFactor() != 0.0f) {
 
-        if (lastTime.QuadPart != 0) {
-            elapsed.QuadPart = (time.QuadPart - lastTime.QuadPart) * 1000000;
-            elapsed.QuadPart /= freq.QuadPart;
-            vel[velIdx++] = (float)(joyState.lX - lastX) / elapsed.QuadPart;
-            v = vel[0] + vel[1] + vel[2] + vel[3] + vel[4] + vel[5] + vel[6] + vel[7];
-            damperForce = v;
-            if (velIdx > 7)
+            QueryPerformanceCounter(&time);
+
+            if (lastTime.QuadPart != 0) {
+                elapsed.QuadPart = (time.QuadPart - lastTime.QuadPart) * 1000000;
+                elapsed.QuadPart /= freq.QuadPart;
+                vel[velIdx] = (float)(joyState.lX - lastX) / elapsed.QuadPart;
+            }
+
+            lastTime.QuadPart = time.QuadPart;
+            lastX = joyState.lX;
+
+            vi = velIdx;
+
+            if (++velIdx > 5)
                 velIdx = 0;
-        }
-        
-        lastTime.QuadPart = time.QuadPart;
-        lastX = joyState.lX;
 
+            fd[fdIdx] = vel[vi++] * firc6[0];
+            for (int i = 1; i < 6; i++) {
+                if (vi > 5)
+                    vi = 0;
+                fd[fdIdx] += vel[vi++] * firc6[i];
+            }
+
+            if (++fdIdx > 3)
+                fdIdx = 0;
+
+            d = (fd[0] + fd[1] + fd[2] + fd[3]) / 4.0f;
+
+            if (nearStops)
+                d *= 150000.0f;
+            else
+                d *= 800.0f * settings.getDampingFactor();
+
+        }
+
+        pforce.lOffset = ffbMag;
+        pforce.lOffset += (int)d;
+
+        if (pforce.lOffset > DI_MAX)
+            pforce.lOffset = DI_MAX;
+        else if (pforce.lOffset < -DI_MAX)
+            pforce.lOffset = -DI_MAX;
+
+        HRESULT hr = effect->SetParameters(&dieff, DIEP_TYPESPECIFICPARAMS | DIEP_NORESTART);
+        if (hr != DI_OK) {
+            debug(L"SetParameters returned 0x%x, requesting reacquire", hr);
+            reacquireDIDevice();
+        }
 
     }
 
@@ -427,6 +468,16 @@ float getCarRedline() {
 
 }
 
+struct understeerCoefs *getCarUsteerCoeffs(char *car) {
+
+    for (int i = 0; i < sizeof(usteerCoefs) / sizeof(usteerCoefs[0]); i++)
+        if (!strcmp(car, usteerCoefs[i].car))
+            return &usteerCoefs[i];
+
+    return nullptr;
+
+}
+
 void clippingReport() {
 
     float clippedPerCent = samples > 0 ? (float)clippedSamples * 100.0f / samples : 0.0f;
@@ -531,6 +582,7 @@ int APIENTRY wWinMain(
     float *LFshockDeflST = nullptr, *RFshockDeflST = nullptr, *CFshockDeflST = nullptr;
     float *LRshockDeflST = nullptr, *RRshockDeflST = nullptr;
     float *vX = nullptr, *vY = nullptr;
+    float *latAccel = nullptr, *yawRate = nullptr;
     float LFshockDeflLast = -10000, RFshockDeflLast = -10000, CFshockDeflLast = -10000;
     float LRshockDeflLast = -10000, RRshockDeflLast = -10000;
     bool *isOnTrack = nullptr, *isInGarage = nullptr, *isOnTrackCar = nullptr;
@@ -541,6 +593,8 @@ int APIENTRY wWinMain(
     int STnumSamples = 0, STmaxIdx = 0, lastTrackSurface = -1;
     float halfSteerMax = 0, lastTorque = 0, lastSuspForce = 0, redline;
     float yaw = 0.0f, yawFilter[DIRECT_INTERP_SAMPLES];
+
+    struct understeerCoefs *usCoefs;
 
     ccEx.dwICC = ICC_WIN95_CLASSES | ICC_BAR_CLASSES | ICC_STANDARD_CLASSES;
     ccEx.dwSize = sizeof(ccEx);
@@ -655,6 +709,12 @@ int APIENTRY wWinMain(
                 setCarStatus(nullptr);
     
             redline = getCarRedline();
+            usCoefs = getCarUsteerCoeffs(car);
+
+            EnableWindow(settings.getUndersteerWnd()->trackbar, usCoefs != nullptr);
+            EnableWindow(settings.getUndersteerWnd()->value, usCoefs != nullptr);
+            EnableWindow(settings.getUndersteerOffsetWnd()->trackbar, usCoefs != nullptr);
+            EnableWindow(settings.getUndersteerOffsetWnd()->value, usCoefs != nullptr);
 
             debug(L"Redline is %f", redline);
             debug(L"Informing iRacing that maxForce is %d", settings.getMaxForce());
@@ -677,6 +737,9 @@ int APIENTRY wWinMain(
             vX = floatvarptr(data, "VelocityX");
             vY = floatvarptr(data, "VelocityY");
 
+            latAccel = floatvarptr(data, "LatAccel");
+            yawRate = floatvarptr(data, "YawRate");
+
             RFshockDeflST = floatvarptr(data, "RFshockDefl_ST");
             LFshockDeflST = floatvarptr(data, "LFshockDefl_ST");
             LRshockDeflST = floatvarptr(data, "LRshockDefl_ST");
@@ -693,13 +756,6 @@ int APIENTRY wWinMain(
             irConnected = true;
             timeBeginPeriod(1);
 
-        }
-
-        // Try to make sure we've retained our acquisition
-        if (ffdevice && reacquireNeeded) {
-            debug(L"Reacquiring DI device");
-            reacquireDIDevice();
-            reacquireNeeded = false;
         }
 
         res = MsgWaitForMultipleObjects(numHandles, handles, FALSE, 1000, QS_ALLINPUT);
@@ -772,6 +828,7 @@ int APIENTRY wWinMain(
                     float halfMaxForce = (float)(settings.getMaxForce() >> 1);
                     float r = *vY / *vX;
                     float sa, asa, ar = abs(r);
+                    float reqSteer, uSteer;
 
                     if (*vX < 0.0f)
                         r = -r;
@@ -799,6 +856,16 @@ int APIENTRY wWinMain(
                     
                     if (jetseat && jetseat->isEnabled() && asa > sopOffset)
                         jetseat->yawEffect(sa);
+
+                    if (usCoefs != nullptr && settings.getUndersteerFactor() > 0.0f) {
+
+                        reqSteer = abs((*yawRate * usCoefs->yawRateMult) / *speed + *latAccel / usCoefs->latAccelDiv);
+                        uSteer = minf(abs(*steer) - reqSteer - 0.2f - settings.getUndersteerOffset(), 1.0f);
+
+                        if (uSteer > 0.0f)
+                            yaw -= uSteer * settings.getUndersteerFactor() * 0.75f * *swTorque;
+
+                    }
 
                 }
 
@@ -982,6 +1049,12 @@ int APIENTRY wWinMain(
 
             // Bump stops
             if (abs(halfSteerMax) < 8.0f) {
+                
+                if (abs(*steer) > halfSteerMax - STOPS_MAXFORCE_RAD * 2.0f)
+                    nearStops = true;
+                else
+                    nearStops = false;
+                
                 if (abs(*steer) > halfSteerMax) {
 
                     float factor, invFactor;
@@ -997,13 +1070,9 @@ int APIENTRY wWinMain(
                         invFactor = 1.0f - factor;
                     }
 
-                    setFFB((int)(factor * DI_MAX + scaleTorque(*swTorque) * invFactor + damperForce * 3000.0f));
+                    setFFB((int)(factor * DI_MAX + scaleTorque(*swTorque) * invFactor));
                     continue;
-                }
-                else if (abs(*steer) > halfSteerMax - STOPS_MAXFORCE_RAD * 2.0f) {
-                    setFFB((scaleTorque(*swTorque) + (int)(damperForce * 3000.0f)));
-                    continue;
-                }
+                }  
 
             }
 
@@ -1303,10 +1372,12 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow) {
     settings.setFfbWnd(combo(mainWnd, L"FFB type:", 44, 80));
     settings.setMinWnd(slider(mainWnd, L"Min force:", 44, 154, L"0", L"20", false));
     settings.setMaxWnd(slider(mainWnd, L"Max force:", 44, 226, L"5 Nm", L"65 Nm", false));
+    settings.setDampingWnd(slider(mainWnd, L"Damping:", 44, 298, L"0", L"100", true));
     settings.setBumpsWnd(slider(mainWnd, L"Suspension bumps:", 464, 40, L"0", L"100", true));
-    settings.setDampingWnd(slider(mainWnd, L"Damping:", 464, 100, L"0", L"100", true));
+    settings.setUndersteerWnd(slider(mainWnd, L"Understeer:", 464, 100, L"0", L"100", true));
+    settings.setUndersteerOffsetWnd(slider(mainWnd, L"Understeer offset:", 464, 160, L"0", L"100", true));
     settings.setSopWnd(slider(mainWnd, L"SoP effect:", 464, 220, L"0", L"100", true));
-    settings.setSopOffsetWnd(slider(mainWnd, L"SoP deadzone:", 464, 280, L"0", L"100", true));
+    settings.setSopOffsetWnd(slider(mainWnd, L"SoP offset:", 464, 280, L"0", L"100", true));
     settings.setUse360Wnd(
         checkbox(
             mainWnd, 
@@ -1342,7 +1413,7 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow) {
     textWnd = CreateWindowEx(
         WS_EX_CLIENTEDGE, L"EDIT", L"",
         WS_VISIBLE | WS_VSCROLL | WS_CHILD | ES_LEFT | ES_MULTILINE | ES_AUTOVSCROLL,
-        32, 312, 376, 300,
+        32, 372, 376, 240,
         mainWnd, NULL, hInst, NULL
     );
     SendMessage(textWnd, EM_SETLIMITTEXT, WPARAM(256000), 0);
@@ -1466,6 +1537,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 settings.setSopFactor((float)SendMessage(wnd, TBM_GETPOS, 0, 0), wnd);
             else if (wnd == settings.getSopOffsetWnd()->trackbar)
                 settings.setSopOffset((float)SendMessage(wnd, TBM_GETPOS, 0, 0), wnd);
+            else if (wnd == settings.getUndersteerWnd()->trackbar)
+                settings.setUndersteerFactor((float)SendMessage(wnd, TBM_GETPOS, 0, 0), wnd);
+            else if (wnd == settings.getUndersteerOffsetWnd()->trackbar)
+                settings.setUndersteerOffset((float)SendMessage(wnd, TBM_GETPOS, 0, 0), wnd);
         }
         break;
 
@@ -1633,6 +1708,8 @@ void debug(wchar_t *fmt, ...) {
     wchar_t msg[512];
     SYSTEMTIME lt;
 
+    va_start(argp, fmt);
+
     GetLocalTime(&lt);
     StringCbPrintf(
         msg, sizeof(msg), L"%d-%02d-%02d %02d:%02d:%02d.%03d ",
@@ -1641,7 +1718,6 @@ void debug(wchar_t *fmt, ...) {
 
     int len = wcslen(msg);
 
-    va_start(argp, fmt);
     StringCbVPrintf(msg + len, sizeof(msg) - (len + 2) * sizeof(wchar_t), fmt, argp);
     va_end(argp);
 
@@ -2021,11 +2097,6 @@ inline void setFFB(int mag) {
     if (!effect)
         return;
 
-    float df = damperForce;
-    int d = (int)(df * 30.0f * settings.getDampingFactor());
-    
-    mag += d;
-
     int amag = abs(mag);
 
     if (amag > maxSample)
@@ -2052,12 +2123,7 @@ inline void setFFB(int mag) {
             mag = -minForce;
     }
 
-    pforce.lOffset = mag;
-    HRESULT hr = effect->SetParameters(&dieff, DIEP_TYPESPECIFICPARAMS | DIEP_NORESTART);
-    if (hr != DI_OK) {
-        debug(L"SetParameters returned 0x%x, requesting reacquire", hr);
-        reacquireNeeded = true;
-    }
+    ffbMag = mag;
 
 }
 

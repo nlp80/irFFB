@@ -31,6 +31,10 @@ class Settings {
         sWins_t *getSopWnd();
         void setSopOffsetWnd(sWins_t *);
         sWins_t *getSopOffsetWnd();
+        void setUndersteerWnd(sWins_t *);
+        sWins_t *getUndersteerWnd();
+        void setUndersteerOffsetWnd(sWins_t *);
+        sWins_t *getUndersteerOffsetWnd();
         void setUse360Wnd(HWND);
         HWND getUse360Wnd();
         void setCarSpecificWnd(HWND);
@@ -63,6 +67,10 @@ class Settings {
         float getSopFactor();
         bool setSopOffset(float, HWND);
         float getSopOffset();
+        bool setUndersteerFactor(float, HWND);
+        float getUndersteerFactor();
+        bool setUndersteerOffset(float, HWND);
+        float getUndersteerOffset();
         void setUse360ForDirect(bool);
         bool getUse360ForDirect();
         void setUseCarSpecific(bool, char *);
@@ -78,6 +86,7 @@ class Settings {
         float getBumpsSetting();
         int getMinForceSetting();
         float getSopOffsetSetting();
+        float getUndersteerOffsetSetting();
         void writeCarSpecificSetting();
         void readRegSettings(char *);
         void readGenericSettings();
@@ -89,11 +98,11 @@ class Settings {
 
     private:
         HWND devWnd, ffbWnd;
-        sWins_t *minWnd, *maxWnd, *bumpsWnd, *dampingWnd, *sopWnd, *sopOffsetWnd;
+        sWins_t *minWnd, *maxWnd, *bumpsWnd, *dampingWnd, *sopWnd, *sopOffsetWnd, *understeerWnd, *understeerOffsetWnd;
         HWND use360Wnd, carSpecificWnd, reduceWhenParkedWnd;
         HWND runOnStartupWnd, startMinimisedWnd, debugWnd;
         int ffbType, ffdeviceIdx, minForce, maxForce;
-        float scaleFactor, bumpsFactor, dampingFactor, sopFactor, sopOffset;
+        float scaleFactor, bumpsFactor, dampingFactor, sopFactor, sopOffset, understeerFactor, understeerOffset;
         bool use360ForDirect, useCarSpecific, debug;
         bool reduceWhenParked, runOnStartup, startMinimised;
         GUID devGuid = GUID_NULL, ffdevices[MAX_FFB_DEVICES];

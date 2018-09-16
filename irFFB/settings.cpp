@@ -74,7 +74,6 @@ bool Settings::getRegSetting(HKEY key, wchar_t *name, bool def) {
         return val > 0;
 
 }
-
     
 Settings::Settings() {
     memset(ffdevices, 0, MAX_FFB_DEVICES * sizeof(GUID));
@@ -83,57 +82,35 @@ Settings::Settings() {
 }
 
 void Settings::setDevWnd(HWND wnd) { devWnd = wnd; }
-HWND Settings::getDevWnd() { return devWnd; }
 
 void Settings::setFfbWnd(HWND wnd) { 
     ffbWnd = wnd; 
     for (int i = 0; i < FFBTYPE_UNKNOWN; i++)
         SendMessage(ffbWnd, CB_ADDSTRING, 0, LPARAM(ffbTypeString(i)));
 }
-HWND Settings::getFfbWnd() { return ffbWnd; }
         
 void Settings::setMinWnd(sWins_t *wnd) {
     minWnd = wnd; 
     SendMessage(minWnd->trackbar, TBM_SETRANGE, TRUE, MAKELPARAM(0, 20));
 }
-sWins_t *Settings::getMinWnd() { return minWnd; }
         
 void Settings::setMaxWnd(sWins_t *wnd) { 
     maxWnd = wnd;
     SendMessage(maxWnd->trackbar, TBM_SETRANGE, TRUE, MAKELPARAM(MIN_MAXFORCE, 65));
 }
-sWins_t *Settings::getMaxWnd() { return maxWnd; }
 
 void Settings::setBumpsWnd(sWins_t *wnd) { bumpsWnd = wnd; }
-sWins_t *Settings::getBumpsWnd() { return bumpsWnd; }
-
 void Settings::setDampingWnd(sWins_t *wnd) { dampingWnd = wnd; }
-sWins_t *Settings::getDampingWnd() { return dampingWnd; }
-
-void Settings::setSopWnd(sWins_t *wnd) { sopWnd = wnd; }
-sWins_t *Settings::getSopWnd() { return sopWnd; }
-        
+void Settings::setSopWnd(sWins_t *wnd) { sopWnd = wnd; } 
 void Settings::setSopOffsetWnd(sWins_t *wnd) { sopOffsetWnd = wnd; }
-sWins_t *Settings::getSopOffsetWnd() { return sopOffsetWnd; }
-
 void Settings::setUndersteerWnd(sWins_t *wnd) { understeerWnd = wnd; }
-sWins_t *Settings::getUndersteerWnd() { return understeerWnd; }
-
 void Settings::setUndersteerOffsetWnd(sWins_t *wnd) { understeerOffsetWnd = wnd; }
-sWins_t *Settings::getUndersteerOffsetWnd() { return understeerOffsetWnd; }
-
 void Settings::setUse360Wnd(HWND wnd) { use360Wnd = wnd; }
-HWND Settings::getUse360Wnd() { return use360Wnd; }
 void Settings::setReduceWhenParkedWnd(HWND wnd) { reduceWhenParkedWnd = wnd; }
-HWND Settings::getReduceWhenParkedWnd() { return reduceWhenParkedWnd; }
 void Settings::setCarSpecificWnd(HWND wnd) { carSpecificWnd = wnd; }
-HWND Settings::getCarSpecificWnd() { return carSpecificWnd; }
 void Settings::setRunOnStartupWnd(HWND wnd) { runOnStartupWnd = wnd; }
-HWND Settings::getRunOnStartupWnd() { return runOnStartupWnd; }
 void Settings::setStartMinimisedWnd(HWND wnd) { startMinimisedWnd = wnd; }
-HWND Settings::getStartMinimisedWnd() { return startMinimisedWnd; }
 void Settings::setDebugWnd(HWND wnd) { debugWnd = wnd; }
-HWND Settings::getDebugWnd() { return debugWnd; }
 
 void Settings::clearFfbDevices() {
     memset(ffdevices, 0, sizeof(ffdevices));
@@ -167,10 +144,6 @@ bool Settings::isFfbDevicePresent() {
     return false;
 }
         
-GUID Settings::getFfbDevice() {
-    return devGuid;
-}
-
 void Settings::setFfbType(int type) {
     if (type >= FFBTYPE_UNKNOWN)
         return;
@@ -181,7 +154,6 @@ void Settings::setFfbType(int type) {
         ffbType == FFBTYPE_DIRECT_FILTER || ffbType == FFBTYPE_DIRECT_FILTER_720
     );    
 }
-int Settings::getFfbType() { return ffbType; }
 
 bool Settings::setMinForce(int min, HWND wnd) {
     if (min < 0.0f || min > 20.0f)
@@ -195,7 +167,6 @@ bool Settings::setMinForce(int min, HWND wnd) {
     }
     return true;
 }
-int Settings::getMinForce() { return minForce; }
  
 bool Settings::setMaxForce(int max, HWND wnd) {
     if (max < MIN_MAXFORCE || max > MAX_MAXFORCE)
@@ -213,9 +184,6 @@ bool Settings::setMaxForce(int max, HWND wnd) {
     );
     return true;
 }
-int Settings::getMaxForce() { return maxForce; }
-
-float Settings::getScaleFactor() { return scaleFactor; }
 
 bool Settings::setBumpsFactor(float factor, HWND wnd) {
     if (factor < 0.0f || factor > 100.0f)
@@ -229,7 +197,6 @@ bool Settings::setBumpsFactor(float factor, HWND wnd) {
     }
     return true;
 }
-float Settings::getBumpsFactor() { return bumpsFactor; }
 
 bool Settings::setDampingFactor(float factor, HWND wnd) {
     if (factor < 0.0f || factor > 100.0f)
@@ -243,7 +210,6 @@ bool Settings::setDampingFactor(float factor, HWND wnd) {
     }
     return true;
 }
-float Settings::getDampingFactor() { return dampingFactor; }
 
 bool Settings::setSopFactor(float factor, HWND wnd) {
     if (factor < 0.0f || factor > 100.0f)
@@ -258,7 +224,6 @@ bool Settings::setSopFactor(float factor, HWND wnd) {
     EnableWindow(sopOffsetWnd->trackbar, factor != 0);
     return true;
 }
-float Settings::getSopFactor() { return sopFactor; }
 
 bool Settings::setSopOffset(float offset, HWND wnd) {
     if (offset < 0.0f || offset > 100.0f)
@@ -272,7 +237,6 @@ bool Settings::setSopOffset(float offset, HWND wnd) {
     }
     return true;
 }
-float Settings::getSopOffset() { return sopOffset; }
 
 bool Settings::setUndersteerFactor(float factor, HWND wnd) {
     if (factor < 0.0f || factor > 100.0f)
@@ -286,7 +250,6 @@ bool Settings::setUndersteerFactor(float factor, HWND wnd) {
     }
     return true;
 }
-float Settings::getUndersteerFactor() { return understeerFactor; }
 
 bool Settings::setUndersteerOffset(float offset, HWND wnd) {
     if (offset < 0.0f || offset > 100.0f)
@@ -300,13 +263,11 @@ bool Settings::setUndersteerOffset(float offset, HWND wnd) {
     }
     return true;
 }
-float Settings::getUndersteerOffset() { return understeerOffset; }
 
 void Settings::setUse360ForDirect(bool set) {
     use360ForDirect = set;
     SendMessage(use360Wnd, BM_SETCHECK, set ? BST_CHECKED : BST_UNCHECKED, NULL);
 }
-bool Settings::getUse360ForDirect() { return use360ForDirect; }
 
 void Settings::setUseCarSpecific(bool set, char *car) {
 
@@ -328,13 +289,11 @@ void Settings::setUseCarSpecific(bool set, char *car) {
     writeCarSpecificSetting();
 
 }
-bool Settings::getUseCarSpecific() { return useCarSpecific; }
 
 void Settings::setReduceWhenParked(bool reduce) { 
     reduceWhenParked = reduce; 
     SendMessage(reduceWhenParkedWnd, BM_SETCHECK, reduce ? BST_CHECKED : BST_UNCHECKED, NULL);
 }
-bool Settings::getReduceWhenParked() { return reduceWhenParked; }
 
 void Settings::setRunOnStartup(bool run) { 
 
@@ -361,23 +320,15 @@ void Settings::setRunOnStartup(bool run) {
     RegCloseKey(regKey);
 
 }
-bool Settings::getRunOnStartup() { return runOnStartup; }
 
 void Settings::setStartMinimised(bool minimised) {
     startMinimised = minimised;
     SendMessage(startMinimisedWnd, BM_SETCHECK, minimised ? BST_CHECKED : BST_UNCHECKED, NULL);
 }
-bool Settings::getStartMinimised() { return startMinimised; }
 
 void Settings::setDebug(bool enabled) {
-
-    SendMessage(debugWnd, BM_SETCHECK, enabled ? BST_CHECKED : BST_UNCHECKED, NULL);
     debug = enabled;
-
-}
-
-bool Settings::getDebug() {
-    return debug;
+    SendMessage(debugWnd, BM_SETCHECK, enabled ? BST_CHECKED : BST_UNCHECKED, NULL);
 }
 
 float Settings::getBumpsSetting() {
@@ -396,8 +347,7 @@ float Settings::getUndersteerOffsetSetting() {
     return understeerOffset * 250.0f;
 }
 
-void Settings::writeCarSpecificSetting() {
-    
+void Settings::writeCarSpecificSetting() { 
     HKEY key = getSettingsRegKey();
     if (key == NULL)
         return;

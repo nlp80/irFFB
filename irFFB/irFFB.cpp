@@ -69,14 +69,20 @@ float firc12[] = {
 };
 
 char car[MAX_CAR_NAME];
-struct understeerCoefs usteerCoefs[] = {
-    {
-        "ferrari488gte", 0.44f, 0.46f
-    }
+understeerCoefs usteerCoefs[] = {
+    { "audir8gt3",          52.0f, 78.0f  },
+    { "ferrari488gt3",      46.0f, 54.0f  },
+    { "ferrari488gte",      44.0f, 46.0f  },
+    { "formularenault20",   34.5f, 96.0f  },
+    { "lotus79",            27.8f, 104.0f },
+    { "mercedesamggt3",     37.5f, 82.0f  },
+    { "mx5 mx52016",        36.0f, 96.0f  },
+    { "porsche911cup",      46.0f, 88.0f  },
+    { "porsche991rsr",      42.0f, 72.0f  },
+    { "rt2000",             25.0f, 86.0f  }
 };
 
-
-int force = 0, maxSample = 0;
+int force = 0;
 volatile float suspForce = 0.0f, damperForce = 0.0f; 
 volatile float yawForce[DIRECT_INTERP_SAMPLES];
 __declspec(align(16)) volatile float suspForceST[DIRECT_INTERP_SAMPLES];
@@ -468,7 +474,7 @@ float getCarRedline() {
 
 }
 
-struct understeerCoefs *getCarUsteerCoeffs(char *car) {
+understeerCoefs *getCarUsteerCoeffs(char *car) {
 
     for (int i = 0; i < sizeof(usteerCoefs) / sizeof(usteerCoefs[0]); i++)
         if (!strcmp(car, usteerCoefs[i].car))
@@ -481,11 +487,10 @@ struct understeerCoefs *getCarUsteerCoeffs(char *car) {
 void clippingReport() {
 
     float clippedPerCent = samples > 0 ? (float)clippedSamples * 100.0f / samples : 0.0f;
-    text(L"Max sample value: %d", maxSample);
     text(L"%.02f%% of samples were clipped", clippedPerCent);
     if (clippedPerCent > 5.0f)
         text(L"Consider increasing max force to reduce clipping");
-    samples = clippedSamples = maxSample = 0;
+    samples = clippedSamples = 0;
 
 }
 
@@ -594,7 +599,7 @@ int APIENTRY wWinMain(
     float halfSteerMax = 0, lastTorque = 0, lastSuspForce = 0, redline;
     float yaw = 0.0f, yawFilter[DIRECT_INTERP_SAMPLES];
 
-    struct understeerCoefs *usCoefs;
+    understeerCoefs *usCoefs;
 
     ccEx.dwICC = ICC_WIN95_CLASSES | ICC_BAR_CLASSES | ICC_STANDARD_CLASSES;
     ccEx.dwSize = sizeof(ccEx);
@@ -860,10 +865,10 @@ int APIENTRY wWinMain(
                     if (usCoefs != nullptr && settings.getUndersteerFactor() > 0.0f) {
 
                         reqSteer = abs((*yawRate * usCoefs->yawRateMult) / *speed + *latAccel / usCoefs->latAccelDiv);
-                        uSteer = minf(abs(*steer) - reqSteer - 0.2f - settings.getUndersteerOffset(), 1.0f);
+                        uSteer = minf(abs(*steer) - reqSteer - 0.175f - settings.getUndersteerOffset(), 1.0f);
 
                         if (uSteer > 0.0f)
-                            yaw -= uSteer * settings.getUndersteerFactor() * 0.75f * *swTorque;
+                            yaw -= uSteer * settings.getUndersteerFactor() * 0.0075f * *swTorque;
 
                     }
 
@@ -2096,11 +2101,6 @@ inline void setFFB(int mag) {
 
     if (!effect)
         return;
-
-    int amag = abs(mag);
-
-    if (amag > maxSample)
-        maxSample = amag;
 
     if (mag <= -IR_MAX) {
         mag = -IR_MAX;

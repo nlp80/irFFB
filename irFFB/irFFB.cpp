@@ -162,6 +162,9 @@ DWORD WINAPI readWheelThread(LPVOID lParam) {
         vjData.wAxisX = joyState.lX;
         vjData.wAxisY = joyState.lY;
         vjData.wAxisZ = joyState.lZ;
+        vjData.wAxisXRot = joyState.lRx;
+        vjData.wAxisYRot = joyState.lRy;
+        vjData.wAxisZRot = joyState.lRz;
 
         if (vjButtons > 0)
             for (int i = 0; i < numButtons; i++) {

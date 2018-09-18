@@ -870,12 +870,14 @@ bool HidGuardian::installService() {
         L"(A;;CCLCSWRPWPDTLOCRRC;;;PU)"           // default permissions for power users
         L"(A;;RPWP;;;IU)";                        // allow interactive users to start and stop
 
-    if (!GetModuleFileNameW(NULL, path, MAX_PATH)) {
+    StringCchCopy(path, MAX_PATH, L"\"");
+
+    if (!GetModuleFileNameW(NULL, path + 1, MAX_PATH - 1)) {
         text(L"HG: Service install - failed to locate module");
         return ret;
     }
 
-    StringCchCatW(path, MAX_PATH, L" service");
+    StringCchCatW(path, MAX_PATH, L"\" service");
 
     scm = OpenSCManagerW(NULL, NULL, SC_MANAGER_ALL_ACCESS);
 

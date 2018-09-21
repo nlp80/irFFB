@@ -83,12 +83,10 @@ understeerCoefs usteerCoefs[] = {
 };
 
 int force = 0;
-volatile float suspForce = 0.0f, damperForce = 0.0f; 
+volatile float suspForce = 0.0f; 
 volatile float yawForce[DIRECT_INTERP_SAMPLES];
 __declspec(align(16)) volatile float suspForceST[DIRECT_INTERP_SAMPLES];
 bool onTrack = false, stopped = true, deviceChangePending = false, logiWheel = false;
-
-bool elevated = false;
 
 volatile int ffbMag = 0;
 volatile bool nearStops = false;
@@ -140,7 +138,7 @@ DWORD WINAPI readWheelThread(LPVOID lParam) {
     ResetVJD(vjDev);
     LONG lastX;
     LARGE_INTEGER lastTime, time, elapsed;
-    float vel[6] = { 0.0f }, fd[4] = { 0.0f };
+    float vel[DIRECT_INTERP_SAMPLES] = { 0.0f }, fd[4] = { 0.0f };
     int velIdx = 0, vi = 0, fdIdx = 0;
 
     lastTime.QuadPart = 0;
@@ -159,9 +157,9 @@ DWORD WINAPI readWheelThread(LPVOID lParam) {
             continue;
         }
 
-        vjData.wAxisX = joyState.lX;
-        vjData.wAxisY = joyState.lY;
-        vjData.wAxisZ = joyState.lZ;
+        vjData.wAxisX    = joyState.lX;
+        vjData.wAxisY    = joyState.lY;
+        vjData.wAxisZ    = joyState.lZ;
         vjData.wAxisXRot = joyState.lRx;
         vjData.wAxisYRot = joyState.lRy;
         vjData.wAxisZRot = joyState.lRz;
@@ -214,12 +212,12 @@ DWORD WINAPI readWheelThread(LPVOID lParam) {
 
             vi = velIdx;
 
-            if (++velIdx > 5)
+            if (++velIdx > DIRECT_INTERP_SAMPLES - 1)
                 velIdx = 0;
 
             fd[fdIdx] = vel[vi++] * firc6[0];
-            for (int i = 1; i < 6; i++) {
-                if (vi > 5)
+            for (int i = 1; i < DIRECT_INTERP_SAMPLES; i++) {
+                if (vi > DIRECT_INTERP_SAMPLES - 1)
                     vi = 0;
                 fd[fdIdx] += vel[vi++] * firc6[i];
             }
@@ -230,9 +228,9 @@ DWORD WINAPI readWheelThread(LPVOID lParam) {
             d = (fd[0] + fd[1] + fd[2] + fd[3]) / 4.0f;
 
             if (nearStops)
-                d *= 150000.0f;
+                d *= DAMPING_MULTIPLIER_STOPS;
             else
-                d *= 800.0f * settings.getDampingFactor();
+                d *= DAMPING_MULTIPLIER * settings.getDampingFactor();
 
         }
 
@@ -560,9 +558,8 @@ int APIENTRY wWinMain(
 ) {
 
     UNREFERENCED_PARAMETER(hPrevInstance);
-    UNREFERENCED_PARAMETER(lpCmdLine);
 
-    if (StrStrW(lpCmdLine, L"service")) {
+    if (StrStrW(lpCmdLine, CMDLINE_HGSVC)) {
 
         SERVICE_TABLE_ENTRYW SvcDispatchTable[] = {
             { SVCNAME, (LPSERVICE_MAIN_FUNCTION)HidGuardian::SvcMain },
@@ -649,8 +646,10 @@ int APIENTRY wWinMain(
         return FALSE;
 
     hidGuardian = HidGuardian::init(GetCurrentProcessId());
-    if (StrStrW(lpCmdLine, L"instHG"))
+    if (StrStrW(lpCmdLine, CMDLINE_HGINST))
         hidGuardian->install();
+    else if (StrStrW(lpCmdLine, CMDLINE_HGREPAIR))
+        hidGuardian->repairService();
 
     fan = Fan::init();
     jetseat = JetSeat::init();
@@ -868,10 +867,10 @@ int APIENTRY wWinMain(
                     if (usCoefs != nullptr && settings.getUndersteerFactor() > 0.0f) {
 
                         reqSteer = abs((*yawRate * usCoefs->yawRateMult) / *speed + *latAccel / usCoefs->latAccelDiv);
-                        uSteer = minf(abs(*steer) - reqSteer - 0.175f - settings.getUndersteerOffset(), 1.0f);
+                        uSteer = minf(abs(*steer) - reqSteer - USTEER_MIN_OFFSET - settings.getUndersteerOffset(), 1.0f);
 
                         if (uSteer > 0.0f)
-                            yaw -= uSteer * settings.getUndersteerFactor() * 0.0075f * *swTorque;
+                            yaw -= uSteer * settings.getUndersteerFactor() * USTEER_MULTIPLIER * *swTorque;
 
                     }
 

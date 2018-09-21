@@ -194,6 +194,7 @@
     <None Include="..\..\..\..\irFFB\HGInstaller64.dat">
       <FileType>Document</FileType>
     </None>
+    <None Include="HGInstaller64.dat" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

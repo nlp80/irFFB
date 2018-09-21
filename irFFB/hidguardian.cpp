@@ -104,7 +104,10 @@ LRESULT CALLBACK HidGuardian::wndProc(HWND hWnd, UINT message, WPARAM wParam, LP
             default:
                 if (HIWORD(wParam) == BN_CLICKED) {
                     if ((HWND)lParam == instance->installWnd)
-                        instance->install();
+                        if (instance->hgStatus == STATUS_NOTINSTALLED)
+                            instance->install();
+                        else if (instance->serviceStatus == SERVICE_STOPPED)
+                            instance->repairService();
                     else if ((HWND)lParam == instance->enabledWnd) {
                         bool oldValue = SendMessage((HWND)lParam, BM_GETCHECK, 0, 0) == BST_CHECKED;
                         instance->setEnabled(!oldValue);
@@ -149,7 +152,7 @@ void HidGuardian::install() {
     IsWow64Process(GetCurrentProcess(), &wow64);
 
     if (!isElevated()) {
-        elevate();
+        elevate(CMDLINE_HGINST);
         return;
     }
 
@@ -264,7 +267,7 @@ void HidGuardian::whitelist(DWORD pid) {
 
     pipeMsg msg;
 
-    if (hgStatus != STATUS_ENABLED)
+    if (hgStatus != STATUS_ENABLED || serviceStatus != SERVICE_RUNNING)
         return;
 
     msg.cmd = HG_CMD_WHITELIST_ADD;
@@ -307,8 +310,13 @@ void HidGuardian::setStatus(int s) {
             if (currentVid != 0)
                 setDevice(currentVid, currentPid);
         }
-        else
+        else {
             text(L"HG: Service failed to start");
+            text(L"HG: Open HidGuardian settings to attempt repair");
+            SetWindowTextW(installWnd, L"Repair");
+            EnableWindow(installWnd, true);
+            goto updatestatus;
+        }
     }
     else if (s == STATUS_DISABLED && queryService() == SERVICE_RUNNING) {
         unWhitelist(GetCurrentProcessId());
@@ -316,15 +324,16 @@ void HidGuardian::setStatus(int s) {
             removeDevice(currentVid, currentPid, true);
         stopService();
         hgStatus = s;
-    }
+    } 
 
-    
+    EnableWindow(installWnd, s == STATUS_NOTINSTALLED);
+ updatestatus:
     StringCchPrintfW(buf, 64, L"Status: %s", statuses[hgStatus]);
     SendMessage(statusWnd, WM_SETTEXT, NULL, (LPARAM)buf);
     SendMessage(enabledWnd, BM_SETCHECK, s == STATUS_ENABLED ? BST_CHECKED : BST_UNCHECKED, NULL);
     EnableWindow(svcWnd, s > STATUS_NOTINSTALLED);
     EnableWindow(enabledWnd, s > STATUS_NOTINSTALLED);
-    EnableWindow(installWnd, s == STATUS_NOTINSTALLED);
+
 
 }
 
@@ -926,6 +935,45 @@ closeScm:
 
 }
 
+void HidGuardian::repairService() {
+
+    HKEY regKey;
+    wchar_t path[MAX_PATH];
+
+    if (!isElevated()) {
+        elevate(CMDLINE_HGREPAIR);
+        return;
+    }
+
+    StringCbCopyW(path, MAX_PATH, L"\"");
+
+    GetModuleFileNameW(NULL, path + 1, MAX_PATH - 2);
+
+    StringCchCatW(path, MAX_PATH, L"\" ");
+    StringCchCatW(path, MAX_PATH, CMDLINE_HGSVC);
+
+    DWORD len = wcslen(path) + 1;;
+
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, HG_SERVICE_KEY, 0, KEY_WRITE, &regKey)) {
+        text(L"HG: Failed to open irFFBsvc registry key");
+        return;
+    }
+
+    
+    if (RegSetValueExW(regKey, L"ImagePath", 0, REG_EXPAND_SZ, (BYTE *)&path, len * sizeof(wchar_t))) {
+        text(L"HG: Failed to update irFFBsvc registry key");
+        return;
+    }
+
+    text(L"HG: Repairing service image path");
+
+    RegCloseKey(regKey);
+    SetWindowTextW(installWnd, L"Install");
+    EnableWindow(installWnd, false);
+    setStatus(hgStatus);
+
+}
+
 int HidGuardian::queryService() {
 
     SC_HANDLE scm, svc;
@@ -975,7 +1023,7 @@ closeScm:
 bool HidGuardian::startService() {
 
     SC_HANDLE scm, svc;
-    LPCWSTR arg = L"service";
+    LPCWSTR arg = CMDLINE_HGSVC;
     bool ret = false;
 
     if (queryService() != SERVICE_STOPPED)
@@ -1001,9 +1049,7 @@ bool HidGuardian::startService() {
 
     }
 
-    if (!StartService(svc, 1, &arg))
-        text(L"HG: Failed to start service: %d", GetLastError());
-    else {
+    if (StartService(svc, 1, &arg)) {
         for (int i = 0; i < 10; i++) {
             if (queryService() == SERVICE_RUNNING) {
                 ret = true;
@@ -1195,7 +1241,7 @@ bool HidGuardian::isElevated() {
 
 }
 
-void HidGuardian::elevate() {
+void HidGuardian::elevate(wchar_t *param) {
 
     wchar_t modPath[MAX_PATH];
 
@@ -1207,7 +1253,7 @@ void HidGuardian::elevate() {
     sei.cbSize = sizeof(SHELLEXECUTEINFOW);
     sei.lpVerb = L"runas";
     sei.lpFile = modPath;
-    sei.lpParameters = L"instHG";
+    sei.lpParameters = param;
     sei.nShow = SW_NORMAL;
 
     if (!ShellExecuteExW(&sei)) {

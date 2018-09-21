@@ -101,5 +101,6 @@
     <None Include="..\..\..\..\irFFB\HGInstaller64.dat">
       <Filter>Resource Files</Filter>
     </None>
+    <None Include="HGInstaller64.dat" />
   </ItemGroup>
 </Project>

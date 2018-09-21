@@ -14,6 +14,7 @@
 #define HG_FILTER_NAME L"HidGuardian"
 #define HG_INSTALLER_NAME L"irFFB_hg64.exe"
 #define HG_PARAMS_KEY L"SYSTEM\\CurrentControlSet\\Services\\HidGuardian\\Parameters"
+#define HG_SERVICE_KEY L"SYSTEM\\CurrentControlSet\\Services\\irFFBsvc"
 #define HG_WHITELIST_SUBKEY L"Whitelist"
 #define HG_DEVICES_VALUE_NAME L"AffectedDevices"
 #define HG_HWID_FMT L"HID\\VID_%04hx&PID_%04hx"
@@ -72,6 +73,7 @@ public:
     void createWindow(HINSTANCE);
     static LRESULT CALLBACK wndProc(HWND, UINT, WPARAM, LPARAM);
     void install(void);
+    void repairService(void);
     bool isEnabled(void);
     void setDevice(WORD, WORD);
     void removeDevice(WORD, WORD, bool);
@@ -104,7 +106,7 @@ private:
     void setSvcStatus(int);
     UINT sendSvcMsg(pipeMsg *);
     bool isElevated(void);
-    void elevate(void);
+    void elevate(wchar_t *);
     void readSettings(void);
     void writeSettings(void);
 

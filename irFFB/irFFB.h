@@ -34,6 +34,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define LONGLOAD_STDPOWER 4
 #define LONGLOAD_MAXPOWER 8
 #define STOPS_MAXFORCE_RAD 0.2618f // 15 deg
+#define DAMPING_MULTIPLIER 800.0f
+#define DAMPING_MULTIPLIER_STOPS 150000.0f
+#define USTEER_MIN_OFFSET 0.175f
+#define USTEER_MULTIPLIER 0.0075f
 #define DIRECT_INTERP_SAMPLES 6
 #define SETTINGS_KEY L"Software\\irFFB\\Settings"
 #define RUN_ON_STARTUP_KEY L"Software\\Microsoft\\Windows\\CurrentVersion\\Run"
@@ -49,7 +53,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define EDIT_INT 0
 #define EDIT_FLOAT 1
 #define ID_TRAY_EXIT 40000
+
 #define SVCNAME L"irFFBsvc"
+#define CMDLINE_HGSVC    L"service"
+#define CMDLINE_HGINST   L"hgInst"
+#define CMDLINE_HGREPAIR L"hgRepair"
 
 #define G25PID  0xc299
 #define DFGTPID 0xc29a

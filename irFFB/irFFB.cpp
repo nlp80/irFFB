@@ -195,6 +195,9 @@ DWORD WINAPI readWheelThread(LPVOID lParam) {
 
         UpdateVJD(vjDev, (PVOID)&vjData);
 
+        if (effect == nullptr)
+            continue;
+
         float d = 0.0f;
         
         if (settings.getDampingFactor() != 0.0f) {
@@ -1498,9 +1501,15 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                             if (settings.getDebug()) {
                                 debugHnd = CreateFileW(settings.getLogPath(), GENERIC_WRITE, FILE_SHARE_READ, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
                                 int chars = SendMessageW(textWnd, WM_GETTEXTLENGTH, 0, 0);
-                                wchar_t *buf = new wchar_t[chars + 1];
+                                wchar_t *buf = new wchar_t[chars + 1], *str = buf;
                                 SendMessageW(textWnd, WM_GETTEXT, chars + 1, (LPARAM)buf);
-                                debug(buf);
+                                wchar_t *end = StrStrW(str, L"\r\n");
+                                while (end) {                                    
+                                    *end = '\0';
+                                    debug(str);
+                                    str = end + 2;
+                                    end = StrStrW(str, L"\r\n");
+                                }
                                 delete[] buf;
                             }
                             else if (debugHnd != INVALID_HANDLE_VALUE) {
@@ -1705,31 +1714,25 @@ void text(wchar_t *fmt, char *charstr) {
 
 }
 
-void debug(wchar_t *fmt, ...) {
+void debug(wchar_t *msg) {
 
     if (!settings.getDebug())
         return;
-
+    
     DWORD written;
-    va_list argp;
-    wchar_t msg[512];
+    wchar_t buf[512];
     SYSTEMTIME lt;
 
-    va_start(argp, fmt);
-
     GetLocalTime(&lt);
-    StringCbPrintf(
-        msg, sizeof(msg), L"%d-%02d-%02d %02d:%02d:%02d.%03d ",
+    StringCbPrintfW(
+        buf, sizeof(buf), L"%d-%02d-%02d %02d:%02d:%02d.%03d ",
         lt.wYear, lt.wMonth, lt.wDay, lt.wHour, lt.wMinute, lt.wSecond, lt.wMilliseconds
     );
 
-    int len = wcslen(msg);
+    StringCbCat(buf, sizeof(buf), msg);
+    StringCbCat(buf, sizeof(buf), L"\r\n");
 
-    StringCbVPrintf(msg + len, sizeof(msg) - (len + 2) * sizeof(wchar_t), fmt, argp);
-    va_end(argp);
-
-    StringCbCat(msg, sizeof(msg), L"\r\n");
-    if (!wcscmp(msg + len, debugLastMsg)) {
+    if (!wcscmp(msg, debugLastMsg)) {
         debugRepeat++;
         return;
     }
@@ -1740,8 +1743,25 @@ void debug(wchar_t *fmt, ...) {
         debugRepeat = 0;
     }
 
-    StringCbCopy(debugLastMsg, sizeof(debugLastMsg), msg + len);
-    WriteFile(debugHnd, msg, wcslen(msg) * sizeof(wchar_t), &written, NULL);
+    StringCbCopy(debugLastMsg, sizeof(debugLastMsg), msg);
+    WriteFile(debugHnd, buf, wcslen(buf) * sizeof(wchar_t), &written, NULL);
+
+}
+
+template <typename T>
+void debug(wchar_t *fmt, T t, ...) {
+
+    if (!settings.getDebug())
+        return;
+    
+    va_list argp = reinterpret_cast<va_list>(&t);
+    wchar_t msg[512];
+
+    va_start(argp, fmt);
+    StringCbVPrintf(msg, sizeof(msg), fmt, argp);
+    va_end(argp);
+
+    debug(msg);
 
 }
 

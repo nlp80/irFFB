@@ -128,7 +128,7 @@ bool *boolvarptr(const char *data, const char *name) {
         return nullptr;
 }
 
-// Thread that reads the wheel via DirectInput and writes to vJoy
+// Thread that reads the wheel, writes to vJoy and updates the DI effect
 DWORD WINAPI readWheelThread(LPVOID lParam) {
 
     UNREFERENCED_PARAMETER(lParam);
@@ -199,8 +199,8 @@ DWORD WINAPI readWheelThread(LPVOID lParam) {
             continue;
 
         float d = 0.0f;
-        
-        if (settings.getDampingFactor() != 0.0f) {
+
+        if (settings.getDampingFactor() != 0.0f || nearStops) {
 
             QueryPerformanceCounter(&time);
 
@@ -255,7 +255,7 @@ DWORD WINAPI readWheelThread(LPVOID lParam) {
 
 }
 
-// Write FFB samples for the direct modes
+// Calculate FFB samples for the direct modes
 DWORD WINAPI directFFBThread(LPVOID lParam) {
 
     UNREFERENCED_PARAMETER(lParam);
@@ -593,10 +593,10 @@ int APIENTRY wWinMain(
     float *latAccel = nullptr, *yawRate = nullptr;
     float LFshockDeflLast = -10000, RFshockDeflLast = -10000, CFshockDeflLast = -10000;
     float LRshockDeflLast = -10000, RRshockDeflLast = -10000;
-    bool *isOnTrack = nullptr, *isInGarage = nullptr, *isOnTrackCar = nullptr;
+    bool *isOnTrack = nullptr, *isInGarage = nullptr;
     int *trackSurface = nullptr, *gear = nullptr;
 
-    bool inGarage = false, onTrackCar = false;
+    bool inGarage = false;
     int numHandles = 0, dataLen = 0, lastGear = 0;
     int STnumSamples = 0, STmaxIdx = 0, lastTrackSurface = -1;
     float halfSteerMax = 0, lastTorque = 0, lastSuspForce = 0, redline;
@@ -740,7 +740,6 @@ int APIENTRY wWinMain(
             rpm = floatvarptr(data, "RPM");
             gear = intvarptr(data, "Gear");
             isOnTrack = boolvarptr(data, "IsOnTrack");
-            isOnTrackCar = boolvarptr(data, "IsOnTrackCar");
             isInGarage = boolvarptr(data, "IsInGarage");
 
             trackSurface = intvarptr(data, "PlayerTrackSurface");
@@ -803,11 +802,6 @@ int APIENTRY wWinMain(
             if (inGarage != *isInGarage) {
                 debug(L"IsInGarage is now %d", *isInGarage);
                 inGarage = *isInGarage;
-            }
-
-            if (onTrackCar != *isOnTrackCar) {
-                debug(L"IsOnTrackCar is now %d", *isOnTrackCar);
-                onTrackCar = *isOnTrackCar;
             }
 
             if (jetseat && jetseat->isEnabled()) {
@@ -1048,6 +1042,12 @@ int APIENTRY wWinMain(
 
             }
 
+            halfSteerMax = *steerMax / 2.0f;
+            if (abs(halfSteerMax) < 8.0f && abs(*steer) > halfSteerMax - STOPS_MAXFORCE_RAD * 2.0f)
+                nearStops = true;
+            else
+                nearStops = false;
+
             if (
                 !*isOnTrack ||
                 settings.getFfbType() == FFBTYPE_DIRECT_FILTER ||
@@ -1055,34 +1055,24 @@ int APIENTRY wWinMain(
             )
                 continue;
 
-            halfSteerMax = *steerMax / 2.0f;
-
             // Bump stops
-            if (abs(halfSteerMax) < 8.0f) {
+            if (abs(halfSteerMax) < 8.0f && abs(*steer) > halfSteerMax) {
                 
-                if (abs(*steer) > halfSteerMax - STOPS_MAXFORCE_RAD * 2.0f)
-                    nearStops = true;
-                else
-                    nearStops = false;
-                
-                if (abs(*steer) > halfSteerMax) {
+                float factor, invFactor;
 
-                    float factor, invFactor;
+                if (*steer > 0) {
+                    factor = (-(*steer - halfSteerMax)) / STOPS_MAXFORCE_RAD;
+                    factor = maxf(factor, -1.0f);
+                    invFactor = 1.0f + factor;
+                }
+                else {
+                    factor = (-(*steer + halfSteerMax)) / STOPS_MAXFORCE_RAD;
+                    factor = minf(factor, 1.0f);
+                    invFactor = 1.0f - factor;
+                }
 
-                    if (*steer > 0) {
-                        factor = (-(*steer - halfSteerMax)) / STOPS_MAXFORCE_RAD;
-                        factor = maxf(factor, -1.0f);
-                        invFactor = 1.0f + factor;
-                    }
-                    else {
-                        factor = (-(*steer + halfSteerMax)) / STOPS_MAXFORCE_RAD;
-                        factor = minf(factor, 1.0f);
-                        invFactor = 1.0f - factor;
-                    }
-
-                    setFFB((int)(factor * DI_MAX + scaleTorque(*swTorque) * invFactor));
-                    continue;
-                }  
+                setFFB((int)(factor * DI_MAX + scaleTorque(*swTorque) * invFactor));
+                continue;
 
             }
 

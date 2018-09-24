@@ -481,9 +481,12 @@ float getCarRedline() {
 understeerCoefs *getCarUsteerCoeffs(char *car) {
 
     for (int i = 0; i < sizeof(usteerCoefs) / sizeof(usteerCoefs[0]); i++)
-        if (!strcmp(car, usteerCoefs[i].car))
+        if (!strcmp(car, usteerCoefs[i].car)) {
+            debug(L"We have understeer coeffs for car %s", car);
             return &usteerCoefs[i];
+        }
 
+    debug(L"No understeer coeffs for car %s", car);
     return nullptr;
 
 }
@@ -492,7 +495,7 @@ void clippingReport() {
 
     float clippedPerCent = samples > 0 ? (float)clippedSamples * 100.0f / samples : 0.0f;
     text(L"%.02f%% of samples were clipped", clippedPerCent);
-    if (clippedPerCent > 5.0f)
+    if (clippedPerCent > 2.5f)
         text(L"Consider increasing max force to reduce clipping");
     samples = clippedSamples = 0;
 
@@ -509,6 +512,7 @@ void logiRpmLed(float *rpm, float redline) {
 }
 
 void deviceChange() {
+
     debug(L"Device change notification");
     if (!onTrack) {
         debug(L"Not on track, processing device change");
@@ -521,6 +525,7 @@ void deviceChange() {
         debug(L"Deferring device change processing whilst on track");
         deviceChangePending = true;
     }
+
 }
 
 DWORD getDeviceVidPid(LPDIRECTINPUTDEVICE8 dev) {
@@ -551,6 +556,7 @@ void restore() {
     debug(L"Restoring window");
     Shell_NotifyIcon(NIM_DELETE, &niData);
     ShowWindow(mainWnd, SW_SHOW);
+    BringWindowToTop(mainWnd);
 }
 
 int APIENTRY wWinMain(
@@ -593,7 +599,7 @@ int APIENTRY wWinMain(
     float *latAccel = nullptr, *yawRate = nullptr;
     float LFshockDeflLast = -10000, RFshockDeflLast = -10000, CFshockDeflLast = -10000;
     float LRshockDeflLast = -10000, RRshockDeflLast = -10000;
-    bool *isOnTrack = nullptr, *isInGarage = nullptr;
+    bool *isOnTrack = nullptr;
     int *trackSurface = nullptr, *gear = nullptr;
 
     bool inGarage = false;
@@ -719,15 +725,14 @@ int APIENTRY wWinMain(
                 setCarStatus(nullptr);
     
             redline = getCarRedline();
+             debug(L"Redline is %d rpm", (int)redline);
+            
             usCoefs = getCarUsteerCoeffs(car);
-
             EnableWindow(settings.getUndersteerWnd()->trackbar, usCoefs != nullptr);
             EnableWindow(settings.getUndersteerWnd()->value, usCoefs != nullptr);
             EnableWindow(settings.getUndersteerOffsetWnd()->trackbar, usCoefs != nullptr);
             EnableWindow(settings.getUndersteerOffsetWnd()->value, usCoefs != nullptr);
 
-            debug(L"Redline is %f", redline);
-            debug(L"Informing iRacing that maxForce is %d", settings.getMaxForce());
             // Inform iRacing of the maxForce setting
             irsdk_broadcastMsg(irsdk_BroadcastFFBCommand, irsdk_FFBCommand_MaxForce, (float)settings.getMaxForce());
 
@@ -740,7 +745,6 @@ int APIENTRY wWinMain(
             rpm = floatvarptr(data, "RPM");
             gear = intvarptr(data, "Gear");
             isOnTrack = boolvarptr(data, "IsOnTrack");
-            isInGarage = boolvarptr(data, "IsInGarage");
 
             trackSurface = intvarptr(data, "PlayerTrackSurface");
             vX = floatvarptr(data, "VelocityX");
@@ -797,11 +801,6 @@ int APIENTRY wWinMain(
             if (*trackSurface != lastTrackSurface) {
                 debug(L"Track surface is now: %d", *trackSurface);
                 lastTrackSurface = *trackSurface;
-            }
-
-            if (inGarage != *isInGarage) {
-                debug(L"IsInGarage is now %d", *isInGarage);
-                inGarage = *isInGarage;
             }
 
             if (jetseat && jetseat->isEnabled()) {
@@ -1738,19 +1737,14 @@ void debug(wchar_t *msg) {
 
 }
 
-template <typename T>
-void debug(wchar_t *fmt, T t, ...) {
+template <typename... T>
+void debug(wchar_t *fmt, T... args) {
 
     if (!settings.getDebug())
         return;
-    
-    va_list argp = reinterpret_cast<va_list>(&t);
+
     wchar_t msg[512];
-
-    va_start(argp, fmt);
-    StringCbVPrintf(msg, sizeof(msg), fmt, argp);
-    va_end(argp);
-
+    StringCbPrintf(msg, sizeof(msg), fmt, args...);
     debug(msg);
 
 }

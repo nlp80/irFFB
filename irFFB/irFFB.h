@@ -118,7 +118,7 @@ bool initVJD();
 void text(wchar_t *, ...);
 void text(wchar_t *, char *);
 void debug(wchar_t *);
-template <typename T> void debug(wchar_t *, T t, ...);
+template <typename... T> void debug(wchar_t *,  T...);
 void setCarStatus(char *);
 void setConnectedStatus(bool);
 void setOnTrackStatus(bool);

@@ -103,11 +103,12 @@ LRESULT CALLBACK HidGuardian::wndProc(HWND hWnd, UINT message, WPARAM wParam, LP
                 break;
             default:
                 if (HIWORD(wParam) == BN_CLICKED) {
-                    if ((HWND)lParam == instance->installWnd)
+                    if ((HWND)lParam == instance->installWnd) {
                         if (instance->hgStatus == STATUS_NOTINSTALLED)
                             instance->install();
                         else if (instance->serviceStatus == SERVICE_STOPPED)
                             instance->repairService();
+                    }
                     else if ((HWND)lParam == instance->enabledWnd) {
                         bool oldValue = SendMessage((HWND)lParam, BM_GETCHECK, 0, 0) == BST_CHECKED;
                         instance->setEnabled(!oldValue);

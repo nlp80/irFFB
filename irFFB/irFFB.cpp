@@ -46,6 +46,8 @@ LPDIRECTINPUT8 pDI = nullptr;
 LPDIRECTINPUTDEVICE8 ffdevice = nullptr;
 LPDIRECTINPUTEFFECT effect = nullptr;
 
+CRITICAL_SECTION effectCrit;
+
 DIJOYSTATE joyState;
 DWORD axes[1] = { DIJOFS_X };
 LONG  dir[1]  = { 0 };
@@ -135,105 +137,93 @@ DWORD WINAPI readWheelThread(LPVOID lParam) {
 
     HRESULT res;
     JOYSTICK_POSITION vjData;
+    DWORD *hats[] = { &vjData.bHats, &vjData.bHatsEx1, &vjData.bHatsEx2, &vjData.bHatsEx3 };
     ResetVJD(vjDev);
     LONG lastX;
     LARGE_INTEGER lastTime, time, elapsed;
     float vel[DIRECT_INTERP_SAMPLES] = { 0.0f }, fd[4] = { 0.0f };
     int velIdx = 0, vi = 0, fdIdx = 0;
+    float d = 0.0f;
 
     lastTime.QuadPart = 0;
 
     while (true) {
 
-        WaitForSingleObject(wheelEvent, INFINITE);
+        DWORD signaled = WaitForSingleObject(wheelEvent, 1);
 
         if (!ffdevice)
             continue;
 
-        res = ffdevice->GetDeviceState(sizeof(joyState), &joyState);
-        if (res != DI_OK) {
-            debug(L"GetDeviceState returned: 0x%x, requesting reacquire", res);
-            reacquireDIDevice();
-            continue;
-        }
+        if (signaled == WAIT_OBJECT_0) {
 
-        vjData.wAxisX    = joyState.lX;
-        vjData.wAxisY    = joyState.lY;
-        vjData.wAxisZ    = joyState.lZ;
-        vjData.wAxisXRot = joyState.lRx;
-        vjData.wAxisYRot = joyState.lRy;
-        vjData.wAxisZRot = joyState.lRz;
-
-        if (vjButtons > 0)
-            for (int i = 0; i < numButtons; i++) {
-                if (joyState.rgbButtons[i])
-                    vjData.lButtons |= 1 << i;
-                else
-                    vjData.lButtons &= ~(1 << i);
+            res = ffdevice->GetDeviceState(sizeof(joyState), &joyState);
+            if (res != DI_OK) {
+                debug(L"GetDeviceState returned: 0x%x, requesting reacquire", res);
+                reacquireDIDevice();
+                continue;
             }
 
-        // This could be wrong, untested..
-        if (vjPov > 0)
-            for (int i = 0; i < numPov; i++) {
+            vjData.wAxisX    = joyState.lX;
+            vjData.wAxisY    = joyState.lY;
+            vjData.wAxisZ    = joyState.lZ;
+            vjData.wAxisXRot = joyState.lRx;
+            vjData.wAxisYRot = joyState.lRy;
+            vjData.wAxisZRot = joyState.lRz;
 
-                switch (i) {
-                    case 0:
-                        vjData.bHats = joyState.rgdwPOV[i];
-                        break;
-                    case 1:
-                        vjData.bHatsEx1 = joyState.rgdwPOV[i];
-                        break;
-                    case 2:
-                        vjData.bHatsEx2 = joyState.rgdwPOV[i];
-                        break;
-                    case 3:
-                        vjData.bHatsEx3 = joyState.rgdwPOV[i];
-                        break;
+            if (vjButtons > 0)
+                for (int i = 0; i < numButtons; i++) {
+                    if (joyState.rgbButtons[i])
+                        vjData.lButtons |= 1 << i;
+                    else
+                        vjData.lButtons &= ~(1 << i);
                 }
 
+            // This could be wrong, untested..
+            if (vjPov > 0)
+                for (int i = 0; i < numPov && i < 4; i++)
+                    *hats[i] = joyState.rgdwPOV[i];
+
+            UpdateVJD(vjDev, (PVOID)&vjData);
+
+            if (effect == nullptr)
+                continue;
+
+            if (settings.getDampingFactor() != 0.0f || nearStops) {
+
+                QueryPerformanceCounter(&time);
+
+                if (lastTime.QuadPart != 0) {
+                    elapsed.QuadPart = (time.QuadPart - lastTime.QuadPart) * 1000000;
+                    elapsed.QuadPart /= freq.QuadPart;
+                    vel[velIdx] = (float)(joyState.lX - lastX) / elapsed.QuadPart;
+                }
+
+                lastTime.QuadPart = time.QuadPart;
+                lastX = joyState.lX;
+
+                vi = velIdx;
+
+                if (++velIdx > DIRECT_INTERP_SAMPLES - 1)
+                    velIdx = 0;
+
+                fd[fdIdx] = vel[vi++] * firc6[0];
+                for (int i = 1; i < DIRECT_INTERP_SAMPLES; i++) {
+                    if (vi > DIRECT_INTERP_SAMPLES - 1)
+                        vi = 0;
+                    fd[fdIdx] += vel[vi++] * firc6[i];
+                }
+
+                if (++fdIdx > 3)
+                    fdIdx = 0;
+
+                d = (fd[0] + fd[1] + fd[2] + fd[3]) / 4.0f;
+
+                if (nearStops)
+                    d *= DAMPING_MULTIPLIER_STOPS;
+                else
+                    d *= DAMPING_MULTIPLIER * settings.getDampingFactor();
+
             }
-
-        UpdateVJD(vjDev, (PVOID)&vjData);
-
-        if (effect == nullptr)
-            continue;
-
-        float d = 0.0f;
-
-        if (settings.getDampingFactor() != 0.0f || nearStops) {
-
-            QueryPerformanceCounter(&time);
-
-            if (lastTime.QuadPart != 0) {
-                elapsed.QuadPart = (time.QuadPart - lastTime.QuadPart) * 1000000;
-                elapsed.QuadPart /= freq.QuadPart;
-                vel[velIdx] = (float)(joyState.lX - lastX) / elapsed.QuadPart;
-            }
-
-            lastTime.QuadPart = time.QuadPart;
-            lastX = joyState.lX;
-
-            vi = velIdx;
-
-            if (++velIdx > DIRECT_INTERP_SAMPLES - 1)
-                velIdx = 0;
-
-            fd[fdIdx] = vel[vi++] * firc6[0];
-            for (int i = 1; i < DIRECT_INTERP_SAMPLES; i++) {
-                if (vi > DIRECT_INTERP_SAMPLES - 1)
-                    vi = 0;
-                fd[fdIdx] += vel[vi++] * firc6[i];
-            }
-
-            if (++fdIdx > 3)
-                fdIdx = 0;
-
-            d = (fd[0] + fd[1] + fd[2] + fd[3]) / 4.0f;
-
-            if (nearStops)
-                d *= DAMPING_MULTIPLIER_STOPS;
-            else
-                d *= DAMPING_MULTIPLIER * settings.getDampingFactor();
 
         }
 
@@ -245,11 +235,20 @@ DWORD WINAPI readWheelThread(LPVOID lParam) {
         else if (pforce.lOffset < -DI_MAX)
             pforce.lOffset = -DI_MAX;
 
+        EnterCriticalSection(&effectCrit);
+
+        if (effect == nullptr) {
+            LeaveCriticalSection(&effectCrit);
+            continue;
+        }
+
         HRESULT hr = effect->SetParameters(&dieff, DIEP_TYPESPECIFICPARAMS | DIEP_NORESTART);
         if (hr != DI_OK) {
             debug(L"SetParameters returned 0x%x, requesting reacquire", hr);
             reacquireDIDevice();
         }
+
+        LeaveCriticalSection(&effectCrit);
 
     }
 
@@ -685,7 +684,10 @@ int APIENTRY wWinMain(
     QueryPerformanceFrequency(&freq);
 
     initVJD();
-    SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS);
+    SetPriorityClass(GetCurrentProcess(), ABOVE_NORMAL_PRIORITY_CLASS);
+
+    InitializeCriticalSection(&effectCrit);
+
     SetThreadPriority(
         CreateThread(NULL, 0, readWheelThread, NULL, 0, NULL), THREAD_PRIORITY_HIGHEST
     );
@@ -2020,19 +2022,25 @@ void initDirectInput() {
 
     text(L"Acquired DI device with %d buttons and %d POV", numButtons, numPov);
 
+    EnterCriticalSection(&effectCrit);
+
     if (FAILED(ffdevice->CreateEffect(GUID_Sine, &dieff, &effect, nullptr))) {
         text(L"Failed to create sine periodic effect");
+        LeaveCriticalSection(&effectCrit);
         return;
     }
 
     if (!effect) {
         text(L"Effect creation failed");
+        LeaveCriticalSection(&effectCrit);
         return;
     }
 
     hr = effect->SetParameters(&dieff, DIEP_TYPESPECIFICPARAMS | DIEP_START);
     if (hr == DIERR_NOTINITIALIZED || hr == DIERR_INPUTLOST || hr == DIERR_INCOMPLETEEFFECT || hr == DIERR_INVALIDPARAM)
         text(L"Error setting parameters of DIEFFECT: %d", hr);
+
+    LeaveCriticalSection(&effectCrit);
 
     if (vidpid != 0)
         hidGuardian->setDevice(LOWORD(vidpid), HIWORD(vidpid));
@@ -2043,9 +2051,11 @@ void releaseDirectInput() {
 
     if (effect) {
         setFFB(0);
+        EnterCriticalSection(&effectCrit);
         effect->Stop();
         effect->Release();
         effect = nullptr;
+        LeaveCriticalSection(&effectCrit);
     }
     if (ffdevice) {
         ffdevice->Unacquire();
@@ -2071,9 +2081,12 @@ void reacquireDIDevice() {
     ffdevice->Unacquire();
     ffdevice->Acquire();
 
+    EnterCriticalSection(&effectCrit);
+
     if (effect == nullptr) {
         if (FAILED(ffdevice->CreateEffect(GUID_Sine, &dieff, &effect, nullptr))) {
             text(L"Failed to create periodic effect during reacquire");
+            LeaveCriticalSection(&effectCrit);
             return;
         }
     }
@@ -2081,6 +2094,8 @@ void reacquireDIDevice() {
     hr = effect->SetParameters(&dieff, DIEP_TYPESPECIFICPARAMS | DIEP_START);
     if (hr == DIERR_NOTINITIALIZED || hr == DIERR_INPUTLOST || hr == DIERR_INCOMPLETEEFFECT || hr == DIERR_INVALIDPARAM)
         text(L"Error setting parameters of DIEFFECT during reacquire: 0x%x", hr);
+
+    LeaveCriticalSection(&effectCrit);
 
 }
 

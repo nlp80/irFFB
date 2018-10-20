@@ -38,6 +38,8 @@ WCHAR szTitle[MAX_LOADSTRING];
 WCHAR szWindowClass[MAX_LOADSTRING];
 NOTIFYICONDATA niData;
 
+HANDLE globalMutex;
+
 HANDLE debugHnd = INVALID_HANDLE_VALUE;
 wchar_t debugLastMsg[512];
 LONG debugRepeat = 0;
@@ -582,6 +584,11 @@ int APIENTRY wWinMain(
         exit(0);
 
     }
+
+    globalMutex = CreateMutex(NULL, false, L"Global\\irFFB_Mutex");
+
+    if (GetLastError() == ERROR_ALREADY_EXISTS)
+        exit(0);
 
     INITCOMMONCONTROLSEX ccEx;
 
@@ -1644,6 +1651,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             hidGuardian->stop(GetCurrentProcessId());
             if (debugHnd != INVALID_HANDLE_VALUE)
                 CloseHandle(debugHnd);
+            CloseHandle(globalMutex);
             exit(0);
         }
         break;

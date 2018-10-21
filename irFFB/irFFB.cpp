@@ -226,6 +226,8 @@ DWORD WINAPI readWheelThread(LPVOID lParam) {
                     d *= DAMPING_MULTIPLIER * settings.getDampingFactor();
 
             }
+            else
+                d = 0.0f;
 
         }
 
@@ -657,6 +659,8 @@ int APIENTRY wWinMain(
     logiEscape.lpvInBuffer = &logiLedData;
     logiEscape.cbInBuffer = sizeof(logiLedData);
 
+    InitializeCriticalSection(&effectCrit);
+
     if (!InitInstance(hInstance, nCmdShow))
         return FALSE;
 
@@ -692,8 +696,6 @@ int APIENTRY wWinMain(
 
     initVJD();
     SetPriorityClass(GetCurrentProcess(), ABOVE_NORMAL_PRIORITY_CLASS);
-
-    InitializeCriticalSection(&effectCrit);
 
     SetThreadPriority(
         CreateThread(NULL, 0, readWheelThread, NULL, 0, NULL), THREAD_PRIORITY_HIGHEST

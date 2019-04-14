@@ -456,7 +456,7 @@ void Settings::writeGenericSettings() {
     setRegSetting(key, L"minForce", getMinForceSetting());
     setRegSetting(key, L"use360ForDirect", use360ForDirect);
 	setRegSetting(key, L"understeerFactor", understeerFactor);
-	setRegSetting(key, L"understeerOffset", understeerFactor);
+	setRegSetting(key, L"understeerOffset", understeerOffset);
 
     RegCloseKey(key);
 

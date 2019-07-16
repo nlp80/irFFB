@@ -352,10 +352,10 @@ extern "C" {
         return version;
     }
 
-    VJOYINTERFACE_API BOOL	__cdecl	DriverMatch(WORD * DllVer, WORD * DrvVer)
+    VJOYINTERFACE_API BOOL	__cdecl	DriverMinVersion(WORD * DllVer, WORD * DrvVer)
         /*
             Compare the version of this DLL to the driver's
-            Return TRUE if identical, otherwise return FALSE
+            Return TRUE if >= DLL, otherwise return FALSE
             If DllVer a valid pointer - sets the version of this DLL file	(e.g. 0x0205)
             If DrvVer a valid pointer - sets the version of driver			(e.g. 0x0205)
             */

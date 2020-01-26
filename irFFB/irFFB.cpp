@@ -2168,8 +2168,8 @@ bool initVJD() {
         text(L"vJoy not enabled!");
         return false;
     }
-    else if (!DriverMatch(&verDll, &verDrv)) {
-        text(L"vJoy driver version %04x != required version %04x!", verDrv, verDll);
+    else if (!DriverMinVersion(&verDll, &verDrv)) {
+        text(L"vJoy driver version %04x < required version %04x!", verDrv, verDll);
         return false;
     }
     else

@@ -258,7 +258,7 @@ extern "C" {
     /////	General driver data
     VJOYINTERFACE_API SHORT __cdecl GetvJoyVersion(void);
     VJOYINTERFACE_API BOOL	__cdecl vJoyEnabled(void);
-    VJOYINTERFACE_API BOOL	__cdecl	DriverMatch(WORD * DllVer, WORD * DrvVer);
+    VJOYINTERFACE_API BOOL	__cdecl	DriverMinVersion(WORD * DllVer, WORD * DrvVer);
     VJOYINTERFACE_API BOOL	__cdecl	vJoyFfbCap(BOOL * Supported);	// Is this version of vJoy capable of FFB?
     VJOYINTERFACE_API BOOL	__cdecl	GetvJoyMaxDevices(int * n);	// What is the maximum possible number of vJoy devices
     VJOYINTERFACE_API BOOL	__cdecl	GetNumberExistingVJD(int * n);	// What is the number of vJoy devices currently enabled

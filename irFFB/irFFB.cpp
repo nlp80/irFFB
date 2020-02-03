@@ -76,7 +76,8 @@ char car[MAX_CAR_NAME];
 understeerCoefs usteerCoefs[] = {
     { "audir8gt3",          52.0f, 78.0f  },
     { "bmwm8gte",           46.0f, 78.0f  },
-    { "bmwz4gt3",           54.0f, 80.0f  },    
+    { "bmwz4gt3",           54.0f, 80.0f  },
+    { "dallaraf3",          38.0f, 102.0f },
     { "ferrari488gt3",      46.0f, 54.0f  },
     { "ferrari488gte",      44.0f, 76.0f  },
     { "formularenault20",   34.5f, 96.0f  },
@@ -86,6 +87,7 @@ understeerCoefs usteerCoefs[] = {
     { "mx5 mx52016",        36.0f, 96.0f  },
     { "porsche911cup",      46.0f, 88.0f  },
     { "porsche991rsr",      42.0f, 72.0f  },
+    { "radical sr8",        36.0f, 85.0f  },
     { "rt2000",             25.0f, 86.0f  }
 };
 

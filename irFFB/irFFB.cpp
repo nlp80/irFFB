@@ -97,7 +97,8 @@ understeerCoefs usteerCoefs[] = {
     { "porsche911cup",      46.0f, 88.0f  },
     { "porsche991rsr",      42.0f, 72.0f  },
     { "radical sr8",        40.0f, 100.0f },
-    { "rt2000",             25.0f, 86.0f  }
+    { "rt2000",             25.0f, 86.0f  },
+    { "rufrt12r track",     46.0f, 88.0f  }
 };
 
 int force = 0;

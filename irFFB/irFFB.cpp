@@ -1158,7 +1158,7 @@ int APIENTRY wWinMain(
         }
 
         // Did we lose iRacing?
-        if (numHandles > 0 && !(hdr->status & irsdk_stConnected)) {
+        if (hdr && numHandles > 0 && !(hdr->status & irsdk_stConnected)) {
             debug(L"Disconnected from iRacing");
             numHandles = 0;
             dataLen = 0;
@@ -2169,11 +2169,13 @@ bool initVJD() {
         return false;
     }
     else if (!DriverMatch(&verDll, &verDrv)) {
-        text(L"vJoy driver version %04x != required version %04x!", verDrv, verDll);
-        return false;
+        if (verDrv < verDll) {
+            text(L"vJoy driver version %04x < required version %04x!", verDrv, verDll);
+            return false;
+        }
     }
-    else
-        text(L"vJoy driver version %04x init OK", verDrv);
+    
+    text(L"vJoy driver version %04x init OK", verDrv);
 
     vjDev = 1;
 

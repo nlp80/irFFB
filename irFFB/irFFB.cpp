@@ -91,6 +91,7 @@ understeerCoefs usteerCoefs[] = {
     { "formulamazda",       34.5f, 96.0f  },
     { "formularenault20",   34.5f, 96.0f  },
     { "formularenault35",   44.0f, 110.0f },
+    { "formulavee",                 23.0f, 68.0f  },
     { "fr500s",                     40.0f, 70.0f  },
     { "hpdarx01c",              44.0f, 110.0f },
     { "indypropm18",         34.5f, 100.0f },
@@ -103,10 +104,13 @@ understeerCoefs usteerCoefs[] = {
     { "nissangtpzxt",           44.0f, 110.0f },
     { "porsche718gt4",      40.0f, 70.0f  },
     { "porsche911cup",      46.0f, 88.0f  },
+    { "porsche911rgt3",      52.0f, 80.0f  },
     { "porsche991rsr",          42.0f, 72.0f  },
     { "radical sr8",                40.0f, 100.0f },
     { "rt2000",                     25.0f, 86.0f  },
-    { "rufrt12r track",          46.0f, 88.0f  }
+    { "rufrt12r track",          46.0f, 88.0f  },
+    { "usf2000usf17",   34.5f, 96.0f  }
+
 };
 
 int force = 0;

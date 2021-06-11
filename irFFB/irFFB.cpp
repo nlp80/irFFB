@@ -109,6 +109,7 @@ understeerCoefs usteerCoefs[] = {
     { "radical sr8",                40.0f, 100.0f },
     { "rt2000",                     25.0f, 86.0f  },
     { "rufrt12r track",          46.0f, 88.0f  },
+    { "specracer",               25.0f, 86.0f  },
     { "usf2000usf17",   34.5f, 96.0f  }
 
 };

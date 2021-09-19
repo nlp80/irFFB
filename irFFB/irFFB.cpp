@@ -97,6 +97,7 @@ understeerCoefs usteerCoefs[] = {
     { "hpdarx01c",          44.0f, 110.0f },
     { "indypropm18",        34.5f, 100.0f },
     { "lamborghinievogt3",  52.0f, 78.0f  },
+    { "lotus49",            23.8f, 70.0f  },
     { "lotus79",            27.8f, 104.0f },
     { "mclaren570sgt4",     40.0f, 70.0f  },
     { "mclarenmp4",         52.0f, 78.0f  },

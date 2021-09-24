@@ -101,6 +101,7 @@ understeerCoefs usteerCoefs[] = {
     { "lotus79",            27.8f, 104.0f },
     { "mclaren570sgt4",     40.0f, 70.0f  },
     { "mclarenmp4",         52.0f, 78.0f  },
+    { "mclarenmp430",       38.0f, 110.0f },
     { "mercedesamggt3",     37.5f, 82.0f  },
     { "mx5 mx52016",        36.0f, 96.0f  },
     { "nissangtpzxt",       44.0f, 110.0f },
@@ -113,8 +114,8 @@ understeerCoefs usteerCoefs[] = {
     { "rt2000",             25.0f, 86.0f  },
     { "rufrt12r track",     46.0f, 88.0f  },
     { "specracer",          25.0f, 86.0f  },
-    { "usf2000usf17",       34.5f, 96.0f  }
-
+    { "usf2000usf17",       34.5f, 96.0f  },
+    { "williamsfw31",       38.0f, 110.0f }
 };
 
 int force = 0;

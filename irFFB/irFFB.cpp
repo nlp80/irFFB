@@ -75,6 +75,7 @@ float firc12[] = {
 char car[MAX_CAR_NAME];
 understeerCoefs usteerCoefs[] = {
     { "astonmartin dbr9",   46.0f, 78.0f  },
+    { "audirs3lms",         40.0f, 70.0f  },
     { "audir8gt3",          52.0f, 78.0f  },
     { "bmwm8gte",           46.0f, 78.0f  },
     { "bmwm4gt4",           40.0f, 70.0f  },
@@ -94,7 +95,9 @@ understeerCoefs usteerCoefs[] = {
     { "formularenault35",   44.0f, 110.0f },
     { "formulavee",         23.0f, 68.0f  },
     { "fr500s",             40.0f, 70.0f  },
+    { "hondacivictyper",    40.0f, 70.0f  },
     { "hpdarx01c",          44.0f, 110.0f },
+    { "hyundaielantracn7",  40.0f, 70.0f  },
     { "indypropm18",        34.5f, 100.0f },
     { "lamborghinievogt3",  52.0f, 78.0f  },
     { "lotus49",            23.8f, 70.0f  },
@@ -103,6 +106,7 @@ understeerCoefs usteerCoefs[] = {
     { "mclarenmp4",         52.0f, 78.0f  },
     { "mclarenmp430",       38.0f, 110.0f },
     { "mercedesamggt3",     37.5f, 82.0f  },
+    { "mercedesw12",        48.0f, 120.0f },
     { "mx5 mx52016",        36.0f, 96.0f  },
     { "nissangtpzxt",       44.0f, 110.0f },
     { "porsche718gt4",      40.0f, 70.0f  },
@@ -115,6 +119,8 @@ understeerCoefs usteerCoefs[] = {
     { "rufrt12r track",     46.0f, 88.0f  },
     { "specracer",          25.0f, 86.0f  },
     { "usf2000usf17",       34.5f, 96.0f  },
+    { "v8supercars fordmustanggt",  52.0f, 78.0f  },
+    { "v8supercars holden2019",     52.0f, 78.0f  },
     { "williamsfw31",       38.0f, 110.0f }
 };
 

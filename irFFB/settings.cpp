@@ -96,7 +96,7 @@ void Settings::setMinWnd(sWins_t *wnd) {
         
 void Settings::setMaxWnd(sWins_t *wnd) { 
     maxWnd = wnd;
-    SendMessage(maxWnd->trackbar, TBM_SETRANGE, TRUE, MAKELPARAM(MIN_MAXFORCE, 65));
+    SendMessage(maxWnd->trackbar, TBM_SETRANGE, TRUE, MAKELPARAM(MIN_MAXFORCE, 195));
 }
 
 void Settings::setBumpsWnd(sWins_t *wnd) { bumpsWnd = wnd; }

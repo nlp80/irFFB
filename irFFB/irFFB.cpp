@@ -1381,7 +1381,7 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow) {
     settings.setDevWnd(combo(mainWnd, L"FFB device:", 44, 20));
     settings.setFfbWnd(combo(mainWnd, L"FFB type:", 44, 80));
     settings.setMinWnd(slider(mainWnd, L"Min force:", 44, 154, L"0", L"20", false));
-    settings.setMaxWnd(slider(mainWnd, L"Max force:", 44, 226, L"5 Nm", L"65 Nm", false));
+    settings.setMaxWnd(slider(mainWnd, L"Max force:", 44, 226, L"5 Nm", L"195 Nm", false));
     settings.setDampingWnd(slider(mainWnd, L"Damping:", 44, 298, L"0", L"100", true));
     settings.setBumpsWnd(slider(mainWnd, L"Suspension bumps:", 464, 40, L"0", L"100", true));
     settings.setUndersteerWnd(slider(mainWnd, L"Understeer:", 464, 100, L"0", L"100", true));

@@ -75,6 +75,7 @@ float firc12[] = {
 char car[MAX_CAR_NAME];
 understeerCoefs usteerCoefs[] = {
     { "astonmartin dbr9",   46.0f, 78.0f  },
+    { "amvantagegt4",       40.0f, 70.0f  }, 
     { "audirs3lms",         40.0f, 70.0f  },
     { "audir8gt3",          52.0f, 78.0f  },
     { "bmwm8gte",           46.0f, 78.0f  },

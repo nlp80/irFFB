@@ -75,7 +75,9 @@ float firc12[] = {
 char car[MAX_CAR_NAME];
 understeerCoefs usteerCoefs[] = {
     { "astonmartin dbr9",   46.0f, 78.0f  },
-    { "amvantagegt4",       40.0f, 70.0f  }, 
+    { "amvantagegt4",       40.0f, 70.0f  },
+    { "audi90gto",          40.0f, 70.0f  },
+    { "audir18",            38.0f, 110.0f },
     { "audirs3lms",         40.0f, 70.0f  },
     { "audir8gt3",          52.0f, 78.0f  },
     { "bmwm8gte",           46.0f, 78.0f  },
@@ -100,6 +102,7 @@ understeerCoefs usteerCoefs[] = {
     { "hondacivictyper",    40.0f, 70.0f  },
     { "hpdarx01c",          44.0f, 110.0f },
     { "hyundaielantracn7",  40.0f, 70.0f  },
+    { "hyundaivelostern",   40.0f, 70.0f  },
     { "indypropm18",        34.5f, 100.0f },
     { "lamborghinievogt3",  52.0f, 78.0f  },
     { "lotus49",            23.8f, 70.0f  },
@@ -117,6 +120,7 @@ understeerCoefs usteerCoefs[] = {
     { "porsche911cup",      46.0f, 88.0f  },
     { "porsche992cup",      48.0f, 90.0f  },
     { "porsche911rgt3",     52.0f, 80.0f  },
+    { "porsche919",         38.0f, 110.0f },
     { "porsche991rsr",      42.0f, 72.0f  },
     { "radical sr8",        40.0f, 100.0f },
     { "radicalsr10",        44.0f, 110.0f },
